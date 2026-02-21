@@ -295,6 +295,8 @@ export default class extends Controller {
     const rows = 24
     debug("creating desktop terminal", { path, cols, rows })
 
+    const shouldAutoLaunchOpencode = await this.shouldAutoLaunchOpencode()
+
     try {
       const result = await desktopTerminal.create({ cwd: path, cols, rows })
       debug("desktopTerminal.create result", result)
@@ -311,12 +313,32 @@ export default class extends Controller {
       this.attachDesktopTerminalHandlers()
       await this.hydrateDesktopSnapshot(result.sessionId)
       this.resizeTerminal()
+
+      if (shouldAutoLaunchOpencode) {
+        this.trackInputForOpencode("opencode\r", result.sessionId)
+        await desktopTerminal.write(result.sessionId, "opencode\r")
+      }
+
       this.updateBackgroundIndicator()
       this.runPendingInitialCommand(result.sessionId)
     } catch (err) {
       this.statusTarget.textContent = "error"
       this.activePath = null
       console.error("Failed to create desktop terminal:", err)
+    }
+  }
+
+  async shouldAutoLaunchOpencode() {
+    if (!isDesktop || typeof desktopTerminal.list !== "function") return false
+
+    try {
+      const sessions = await desktopTerminal.list()
+      if (!Array.isArray(sessions)) return false
+      const activeSessions = sessions.filter((session) => session && session.state !== "exited")
+      return activeSessions.length === 0
+    } catch (error) {
+      debug("shouldAutoLaunchOpencode failed", { error })
+      return false
     }
   }
 
@@ -712,8 +734,6 @@ export default class extends Controller {
   traceActionClick(event) {
     const message = event?.detail?.message || "click (unknown-action)"
     console.log(TAG, message)
-    if (!this.term) return
-    this.term.writeln(`\r\n${message}`)
   }
 
   trackInputForOpencode(data, sessionId = this.sessionId) {
