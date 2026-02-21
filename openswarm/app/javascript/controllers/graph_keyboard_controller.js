@@ -71,6 +71,14 @@ export default class extends Controller {
     this.pendingCommitWorktreeId = null
     this.pendingMergeConflict = null
     this.openTerminalInFlight = false
+    this.refreshTimeoutIds = []
+    this.lastAutoRefreshAt = 0
+
+    this.externalRefreshHandler = this.handleExternalRefresh.bind(this)
+    window.addEventListener("worktree:refresh-request", this.externalRefreshHandler)
+    this.periodicRefreshId = window.setInterval(() => {
+      this.requestRefresh("periodic")
+    }, 30000)
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
     if (initialId) {
@@ -82,6 +90,12 @@ export default class extends Controller {
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
+    window.removeEventListener("worktree:refresh-request", this.externalRefreshHandler)
+    this.clearScheduledRefreshes()
+    if (this.periodicRefreshId) {
+      window.clearInterval(this.periodicRefreshId)
+      this.periodicRefreshId = null
+    }
   }
 
   handleKeydown(event) {
@@ -327,7 +341,44 @@ export default class extends Controller {
 
   refresh() {
     this.traceAction("refresh")
+    this.requestRefresh("manual", { force: true })
+  }
+
+  requestRefresh(reason, { force = false } = {}) {
+    if (!force) {
+      if (document.visibilityState !== "visible") return
+      if (this.isModalOpen()) return
+      if (reason === "periodic" && this.isTerminalPanelVisible()) return
+
+      const now = Date.now()
+      if (now - this.lastAutoRefreshAt < 1500) return
+      this.lastAutoRefreshAt = now
+    }
+
     Turbo.visit(window.location.href, { action: "replace" })
+  }
+
+  handleExternalRefresh(event) {
+    const detail = event?.detail || {}
+    const delays = Array.isArray(detail.delaysMs) ? detail.delaysMs : [900, 2200]
+    this.clearScheduledRefreshes()
+
+    delays.forEach((delayMs) => {
+      const timeoutId = window.setTimeout(() => {
+        this.requestRefresh("terminal")
+      }, Math.max(0, Number(delayMs) || 0))
+      this.refreshTimeoutIds.push(timeoutId)
+    })
+  }
+
+  clearScheduledRefreshes() {
+    this.refreshTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    this.refreshTimeoutIds = []
+  }
+
+  isTerminalPanelVisible() {
+    const panel = document.querySelector(".terminal-panel")
+    return panel?.dataset?.visible === "true"
   }
 
   async openProjectPicker() {
