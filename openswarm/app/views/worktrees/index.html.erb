@@ -68,7 +68,10 @@
              viewBox="0 0 <%= @layout[:width] %> <%= @layout[:height] %>"
              style="width: <%= @layout[:width] %>px; height: <%= @layout[:height] %>px;">
           <defs>
-            <linearGradient id="edge-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <linearGradient id="edge-grad"
+                            gradientUnits="userSpaceOnUse"
+                            x1="0" y1="0"
+                            x2="0" y2="<%= @layout[:height] %>">
               <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.8" />
               <stop offset="50%" stop-color="#93c5fd" stop-opacity="0.5" />
               <stop offset="100%" stop-color="#93c5fd" stop-opacity="0.3" />
