@@ -407,34 +407,34 @@
   </div>
 
   <%# ═══ Terminal overlay (hide/show, PTY stays alive in background) ═══ %>
-  <div class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/55 backdrop-blur-[2px] p-0 sm:p-4"
+  <div class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/45 backdrop-blur-sm p-0 sm:p-6"
        data-web-terminal-target="panel"
        data-action="click->web-terminal#backdropClose">
-    <div class="w-full sm:w-[94vw] sm:max-w-6xl h-[82vh] sm:h-[74vh] mb-0 sm:mb-6 rounded-t-2xl sm:rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-900 shadow-[0_20px_80px_rgba(2,6,23,0.72)]">
-      <div class="h-12 px-4 border-b border-slate-700/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 flex items-center gap-3">
+    <div class="w-full sm:w-[92vw] sm:max-w-5xl h-[86dvh] sm:h-[78vh] mb-0 sm:mb-4 rounded-t-2xl sm:rounded-2xl overflow-hidden border border-slate-300/70 bg-white/95 shadow-[0_28px_90px_rgba(15,23,42,0.36)] flex flex-col">
+      <div class="h-12 px-4 border-b border-slate-200 bg-slate-50/95 flex items-center gap-3 shrink-0">
         <div class="flex items-center gap-1.5 shrink-0">
-          <span class="w-2.5 h-2.5 rounded-full bg-red-400/85"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-amber-300/85"></span>
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/85"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-red-400"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-300"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
         </div>
-        <div class="min-w-0 flex-1 text-[11px] text-slate-300 font-mono truncate">
+        <div class="min-w-0 flex-1 text-[11px] text-slate-700 font-mono truncate">
           <span data-web-terminal-target="path"></span>
         </div>
-        <div class="ml-auto flex items-center gap-2 text-[10px] font-mono text-slate-300 shrink-0">
-          <span class="hidden sm:inline-flex px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 text-slate-400">shell: <span class="ml-1 text-slate-300" data-web-terminal-target="shell"></span></span>
-          <span class="inline-flex min-w-20 justify-center px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 text-slate-300">status: <span class="ml-1" data-web-terminal-target="status">idle</span></span>
+        <div class="ml-auto flex items-center gap-2 text-[10px] font-mono text-slate-600 shrink-0">
+          <span class="hidden sm:inline-flex px-2 py-0.5 rounded-md border border-slate-200 bg-white text-slate-500">shell: <span class="ml-1 text-slate-700" data-web-terminal-target="shell"></span></span>
+          <span class="inline-flex min-w-20 justify-center px-2 py-0.5 rounded-md border border-slate-200 bg-white text-slate-600">status: <span class="ml-1" data-web-terminal-target="status">idle</span></span>
           <button type="button"
-                  class="px-2 py-1 rounded-md border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+                  class="px-2 py-1 rounded-md border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-slate-400 hover:bg-white transition-colors"
                   data-action="click->web-terminal#closePanel"
                   title="Minimize — press 'o' or click indicator to reopen">minimize</button>
           <button type="button"
-                  class="px-2 py-1 rounded-md border border-red-800 text-red-300 hover:text-red-100 hover:border-red-600 transition-colors"
+                  class="px-2 py-1 rounded-md border border-red-300 text-red-600 hover:text-red-700 hover:border-red-400 hover:bg-red-50 transition-colors"
                   data-action="click->web-terminal#killTerminal"
                   title="Kill terminal session">kill</button>
         </div>
       </div>
-      <div class="h-[calc(100%-3rem)] p-2 sm:p-3 bg-gradient-to-b from-slate-900 to-slate-950 terminal-wrap">
-        <div class="w-full h-full rounded-lg overflow-hidden border border-slate-800/90 bg-[#070b14]"
+      <div class="flex-1 min-h-0 p-2 sm:p-3 bg-gradient-to-b from-slate-100 to-white terminal-wrap">
+        <div class="w-full h-full rounded-xl overflow-hidden border border-slate-300 bg-[#0b1220]"
              data-web-terminal-target="terminal"></div>
       </div>
     </div>

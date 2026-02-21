@@ -67,6 +67,7 @@ export default class extends Controller {
     this.outputParseCarry = ""
     this.sessionMetaById = new Map()
     this.pendingSessionMeta = null
+    this.resizeObserver = null
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -77,6 +78,12 @@ export default class extends Controller {
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
+
+    if (typeof ResizeObserver === "function") {
+      this.resizeObserver = new ResizeObserver(() => this.resizeTerminal())
+      if (this.hasPanelTarget) this.resizeObserver.observe(this.panelTarget)
+      if (this.hasTerminalTarget) this.resizeObserver.observe(this.terminalTarget)
+    }
 
     // Desktop: subscribe to PTY events globally
     if (isDesktop) {
@@ -155,6 +162,11 @@ export default class extends Controller {
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
 
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+    }
+
     this.ipcCleanups.forEach((fn) => fn())
     this.ipcCleanups = []
 
@@ -180,6 +192,7 @@ export default class extends Controller {
 
     // Layout can settle a frame later after un-hiding; refit once more.
     window.setTimeout(() => this.resizeTerminal(), 40)
+    window.setTimeout(() => this.resizeTerminal(), 180)
   }
 
   hidePanel() {
@@ -400,10 +413,12 @@ export default class extends Controller {
 
     this.term = new Terminal({
       cursorBlink: true,
-      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-      fontSize: 13,
-      lineHeight: 1.35,
+      fontFamily: '"SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 14,
+      lineHeight: 1.32,
+      letterSpacing: 0,
       convertEol: false,
+      scrollback: 5000,
       theme: {
         background: "#0b1220",
         foreground: "#dbe5f5",
