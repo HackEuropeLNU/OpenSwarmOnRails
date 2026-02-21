@@ -351,11 +351,6 @@ createApp({
     },
     onGlobalKeydown(event) {
       const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && key === "b") {
-        event.preventDefault();
-        this.cycleBackground();
-      }
-
       if (key === "t") {
         this.toggleTheme();
       }
