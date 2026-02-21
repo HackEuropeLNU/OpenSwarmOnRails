@@ -648,13 +648,18 @@ export default class extends Controller {
       return
     }
 
-    const command = `opencode --prompt ${this.shellQuote(conflict.prompt)}`
+    const command = `opencode --prompt ${this.shellQuotedSingleLineArg(conflict.prompt)}`
     this.closeDialogs()
     await this.openTerminal(conflict.parentId, { initialCommand: command })
   }
 
-  shellQuote(text) {
-    return `'${String(text).replace(/'/g, `'"'"'`)}'`
+  shellQuotedSingleLineArg(text) {
+    return `$'${String(text)
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/\r/g, "\\r")
+      .replace(/\n/g, "\\n")
+      .replace(/\t/g, "\\t")}'`
   }
 
   createFromNode(event) {
