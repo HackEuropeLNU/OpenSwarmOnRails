@@ -73,11 +73,15 @@ export default class extends Controller {
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
     this.toggleHandler = this.togglePanel.bind(this)
+    this.focusTerminalHandler = this.focusTerminal.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
+    if (this.hasTerminalTarget) {
+      this.terminalTarget.addEventListener("pointerdown", this.focusTerminalHandler)
+    }
 
     if (typeof ResizeObserver === "function") {
       this.resizeObserver = new ResizeObserver(() => this.resizeTerminal())
@@ -156,6 +160,9 @@ export default class extends Controller {
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
+    if (this.hasTerminalTarget) {
+      this.terminalTarget.removeEventListener("pointerdown", this.focusTerminalHandler)
+    }
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect()
@@ -169,6 +176,11 @@ export default class extends Controller {
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
     document.documentElement.classList.remove("overflow-hidden")
+  }
+
+  focusTerminal() {
+    if (!this.term) return
+    this.term.focus()
   }
 
   // ── Show / hide using slide transform (never dispose xterm, always keep mounted) ──
