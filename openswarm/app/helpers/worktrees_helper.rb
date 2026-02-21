@@ -22,14 +22,16 @@ module WorktreesHelper
 
   def node_state_badge_class(state)
     case state
+    when "detached"
+      "bg-red-50 text-red-700 border-red-200"
     when "dirty"
       "bg-red-50 text-red-600 border-red-200"
-    when "behind parent"
+    when "behind parent", "behind head"
       "bg-amber-50 text-amber-600 border-amber-200"
-    when "ahead"
-      "bg-emerald-50 text-emerald-600 border-emerald-200"
-    when "main"
-      "bg-amber-50 text-amber-700 border-amber-200"
+    when "committed", "local only", "ahead"
+      "bg-orange-50 text-orange-700 border-orange-200"
+    when "pushed", "main"
+      "bg-emerald-50 text-emerald-700 border-emerald-200"
     else
       "bg-gray-50 text-gray-600 border-gray-200"
     end

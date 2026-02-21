@@ -332,7 +332,7 @@ export default class extends Controller {
     this.detailsDirtyDotTarget.classList.toggle("bg-red-500", isDirty)
     this.detailsDirtyDotTarget.classList.toggle("bg-emerald-500", !isDirty)
 
-    const state = node.dataset.state || "committed"
+    const state = node.dataset.state || "pushed"
     const badgeClass = (node.dataset.badgeClass || "bg-gray-50 text-gray-600 border-gray-200").split(" ")
     this.detailsStateTarget.className = "text-[10px] px-1.5 py-0.5 rounded-md border font-mono"
     this.detailsStateTarget.classList.add(...badgeClass)
