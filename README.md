@@ -1,24 +1,33 @@
 # OpenSwarm on Rails
 
-OpenSwarm is a Rails app for visual Git worktree management. It renders worktrees as a graph and lets you run common branch workflows (fetch, pull, rebase, commit, push, merge) from one place.
+OpenSwarm is a Rails app for visual Git worktree management. It helps you see branch relationships as a graph and run common branch workflows from one place.
+
+## What it does
+
+- Discovers repositories and their worktrees
+- Visualizes branch/worktree relationships as a graph
+- Creates and deletes worktrees
+- Runs common workflows: fetch/pull, rebase, commit, push, merge
+- Opens terminals in selected worktrees
 
 ## Repository layout
 
 - `openswarm/` - main Rails 8.1 app (Hotwire + Tailwind + ActionCable)
-- `desktop/` - Electron shell for packaging the app as a desktop client (macOS DMG support)
+- `desktop/` - Electron wrapper for running OpenSwarm as a desktop app
 - `ui_scaffold/` - early static UI prototype
 
-## Prerequisites
+## Requirements
 
-- Ruby `3.3.10`
+- Ruby `3.3.10` (see `openswarm/.ruby-version`)
 - Bundler
-- Node.js and npm
+- Node.js + npm
 - Git
 
 ## Quick start
 
+From the repo root:
+
 ```bash
-# from repo root
 cd openswarm
 bin/setup --skip-server
 cd ..
@@ -27,25 +36,31 @@ make dev-backend
 
 Then open `http://localhost:3000`.
 
-If your target repository is not auto-detected, set `OPENSWARM_REPO_ROOTS`:
+## Choose which repos to scan
+
+OpenSwarm auto-discovers common local repos. To target specific repos, set `OPENSWARM_REPO_ROOTS`:
 
 ```bash
-OPENSWARM_REPO_ROOTS="/absolute/path/to/repo" make dev-backend
+OPENSWARM_REPO_ROOTS="/absolute/path/to/repo:/another/repo" make dev-backend
 ```
+
+Use your platform path separator in that variable (`:` on macOS/Linux).
 
 ## Common commands
 
-- `make dev` - run Rails, Tailwind watcher, and the static scaffold server
-- `make dev-backend` - run Rails and Tailwind watcher only
+- `make dev-backend` - Rails server + Tailwind watcher
+- `make dev` - backend plus static `ui_scaffold/` server
 - `make dev-frontend` - serve `ui_scaffold/` only
-- `make electron-dev` - run Rails and launch the Electron shell
-- `make electron-dmg` - build a macOS `.dmg` in `desktop/dist/`
+- `make electron-dev` - run backend and launch Electron shell
+- `make electron-dmg` - build macOS `.dmg` into `desktop/dist/`
 - `make electron-clean` - remove desktop build artifacts
 
-## App-level commands
+## Quality checks
 
 From `openswarm/`:
 
-- `bin/rails test` - run test suite
-- `bin/rubocop` - run lint checks
-- `bin/brakeman` - run security scan
+```bash
+bin/ci
+```
+
+This runs setup plus style and security checks used by the project.

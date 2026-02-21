@@ -1,8 +1,8 @@
 # OpenSwarm Rails App
 
-This directory contains the Rails application that powers OpenSwarm.
+This directory contains the main OpenSwarm Rails application.
 
-For workspace-level commands and Electron packaging, see the repository root README: `../README.md`.
+For project-level setup and desktop workflow commands, start with `../README.md`.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ For workspace-level commands and Electron packaging, see the repository root REA
 - Bundler
 - Node.js and npm
 
-## Setup
+## Local setup
 
 ```bash
 bin/setup --skip-server
@@ -18,7 +18,7 @@ bin/setup --skip-server
 
 This installs gems, prepares the database, and clears stale logs/temp files.
 
-## Run in development
+## Run locally
 
 From the repository root, prefer:
 
@@ -32,9 +32,10 @@ Or from this directory:
 bin/dev
 ```
 
-## Useful commands
+## Checks
 
-- `bin/rails test` - run tests
-- `bin/rubocop` - run linting
-- `bin/brakeman` - run security checks
-- `bin/rails db:prepare` - create/migrate database
+```bash
+bin/ci
+```
+
+`bin/ci` runs setup plus style and security checks configured in `config/ci.rb`.
