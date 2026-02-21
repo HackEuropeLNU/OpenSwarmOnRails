@@ -180,11 +180,11 @@ export default class extends Controller {
     document.documentElement.classList.remove("overflow-hidden")
   }
 
-  // ── Show / hide without destroying the PTY ──
+  // ── Show / hide using visibility (never display:none, never dispose xterm) ──
 
   showPanel() {
     debug("showPanel")
-    this.panelTarget.classList.remove("hidden")
+    this.panelTarget.dataset.visible = "true"
     this.panelVisible = true
     document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
@@ -194,25 +194,14 @@ export default class extends Controller {
       this.resizeTerminal()
       if (this.term) this.term.focus()
     })
-
-    // Layout can settle a frame later after un-hiding; refit once more.
-    window.setTimeout(() => this.resizeTerminal(), 40)
-    window.setTimeout(() => this.resizeTerminal(), 180)
   }
 
   hidePanel() {
     debug("hidePanel")
-    this.panelTarget.classList.add("hidden")
+    this.panelTarget.dataset.visible = "false"
     this.panelVisible = false
     document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
-
-    if (this.term) {
-      this.term.dispose()
-      this.term = null
-      this.fitAddon = null
-      this.terminalTarget.innerHTML = ""
-    }
   }
 
   ensureTerminalReady() {
@@ -291,6 +280,8 @@ export default class extends Controller {
       this.pathTarget.textContent = path
       this.shellTarget.textContent = existingSession.shell || ""
       this.statusTarget.textContent = "connected"
+      this.setupTerminal()
+      this.attachDesktopTerminalHandlers()
       this.showPanel()
       this.term.focus()
       this.resizeTerminal()
@@ -305,6 +296,7 @@ export default class extends Controller {
     this.pathTarget.textContent = path
     this.statusTarget.textContent = "creating"
 
+    this.setupTerminal()
     this.showPanel()
 
     const cols = this.term?.cols || 80
@@ -330,6 +322,8 @@ export default class extends Controller {
       this.statusTarget.textContent = "connected"
       this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
       this.desktopPathBySessionId.set(result.sessionId, path)
+
+      this.attachDesktopTerminalHandlers()
 
       this.term.focus()
       this.resizeTerminal()
@@ -407,6 +401,7 @@ export default class extends Controller {
     this.pendingSessionMeta = this.buildSessionMeta(payload)
     this.sessionMetaById.set(payload.session_id, this.pendingSessionMeta)
 
+    this.setupTerminal()
     this.showPanel()
     this.connectSubscription(payload.session_id)
     this.updateBackgroundIndicator()
