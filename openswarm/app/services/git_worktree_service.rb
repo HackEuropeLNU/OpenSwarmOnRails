@@ -37,7 +37,7 @@ class GitWorktreeService
       Result.new(success: false, error: "#{e.class}: #{e.message}")
     end
 
-    def create_worktree(repo_root:, parent_branch:, branch_name:)
+    def create_worktree(repo_root:, parent_branch:, branch_name:, replace_existing: false, force_replace: false)
       return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
       return Result.new(success: false, error: "Parent branch is required") if parent_branch.to_s.strip.empty?
 
@@ -60,12 +60,31 @@ class GitWorktreeService
       worktree_path = File.join(workspace_root, path_slug)
 
       if File.exist?(worktree_path)
-        return Result.new(success: false, error: "Worktree path already exists: #{worktree_path}")
+        unless replace_existing
+          return Result.new(success: false, error: "Worktree path already exists: #{worktree_path}")
+        end
       end
 
       branch_exists = git(main_root, "show-ref", "--verify", "refs/heads/#{branch}")
       if branch_exists
-        return Result.new(success: false, error: "Branch already exists: #{branch}")
+        unless replace_existing
+          return Result.new(success: false, error: "Branch already exists: #{branch}")
+        end
+
+        cleanup_result = remove_existing_branch_and_worktree(
+          main_root: main_root,
+          branch: branch,
+          force: force_replace
+        )
+        return cleanup_result unless cleanup_result.success
+      end
+
+      if replace_existing && File.exist?(worktree_path)
+        unless worktree_path.start_with?("#{workspace_root}/")
+          return Result.new(success: false, error: "Refusing to remove unexpected path: #{worktree_path}")
+        end
+
+        FileUtils.rm_rf(worktree_path)
       end
 
       stdout, stderr, status = git_capture3(
@@ -173,6 +192,34 @@ class GitWorktreeService
     def git_repo?(path)
       result = git(path, "rev-parse", "--git-dir")
       !result.nil?
+    end
+
+    def remove_existing_branch_and_worktree(main_root:, branch:, force:)
+      discovery = discover(main_root)
+      return Result.new(success: false, error: discovery.error) unless discovery.success
+
+      existing = discovery.data[:worktrees].find { |wt| wt.branch == branch && !wt.detached }
+      if existing
+        if existing.parent_branch.nil?
+          return Result.new(success: false, error: "Cannot replace main worktree branch: #{branch}")
+        end
+
+        removal = delete_worktree(repo_root: main_root, worktree_path: existing.path, force: force)
+        return removal unless removal.success
+      end
+
+      delete_flag = force ? "-D" : "-d"
+      stdout, stderr, status = git_capture3(main_root, "branch", delete_flag, branch)
+      unless status.success?
+        error = stderr.to_s.strip
+        error = stdout.to_s.strip if error.empty?
+        error = "Failed to delete existing branch: #{branch}" if error.empty?
+        return Result.new(success: false, error: error)
+      end
+
+      Result.new(success: true, data: { branch: branch })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
     end
 
     def parse_porcelain(output, main_root)
