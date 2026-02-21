@@ -31,6 +31,7 @@ const TOKEN_RATE_PATTERNS = [
   /\b(?:tokens?|tok)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
   /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
 ]
+const GIT_MUTATION_COMMAND_REGEX = /\bgit\s+(?:commit|push|pull|fetch|merge|rebase|cherry-pick|revert|reset|switch|checkout|branch|stash|worktree|am|apply)\b/i
 
 export default class extends Controller {
   static targets = [
@@ -748,6 +749,7 @@ export default class extends Controller {
 
       if (char === "\r" || char === "\n") {
         const command = state.inputBuffer.trim()
+        this.maybeRequestGraphRefresh(command)
         if (command.startsWith("opencode")) {
           state.trackingOpencode = true
           state.outputTail = ""
@@ -770,6 +772,21 @@ export default class extends Controller {
         state.inputBuffer += char
       }
     }
+  }
+
+  maybeRequestGraphRefresh(command) {
+    if (!command) return
+    if (!GIT_MUTATION_COMMAND_REGEX.test(command)) return
+
+    window.dispatchEvent(
+      new CustomEvent("worktree:refresh-request", {
+        detail: {
+          source: "terminal",
+          command,
+          delaysMs: [900, 2500]
+        }
+      })
+    )
   }
 
   recordOutputActivity(text, sessionId = this.sessionId) {

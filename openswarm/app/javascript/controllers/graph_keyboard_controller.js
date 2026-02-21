@@ -26,17 +26,20 @@ export default class extends Controller {
     "createParent",
     "replaceModal",
     "replaceBranch",
+    "replaceCancel",
     "deleteModal",
     "deleteBranch",
     "deleteDirty",
     "deleteForce",
+    "deleteCancel",
     "commitModal",
     "commitBranch",
     "commitInput",
     "mergeConflictModal",
     "mergeConflictSource",
     "mergeConflictTarget",
-    "mergeConflictFiles"
+    "mergeConflictFiles",
+    "mergeConflictManual"
   ]
 
   static values = {
@@ -68,6 +71,14 @@ export default class extends Controller {
     this.pendingCommitWorktreeId = null
     this.pendingMergeConflict = null
     this.openTerminalInFlight = false
+    this.refreshTimeoutIds = []
+    this.lastAutoRefreshAt = 0
+
+    this.externalRefreshHandler = this.handleExternalRefresh.bind(this)
+    window.addEventListener("worktree:refresh-request", this.externalRefreshHandler)
+    this.periodicRefreshId = window.setInterval(() => {
+      this.requestRefresh("periodic")
+    }, 30000)
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
     if (initialId) {
@@ -79,6 +90,12 @@ export default class extends Controller {
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
+    window.removeEventListener("worktree:refresh-request", this.externalRefreshHandler)
+    this.clearScheduledRefreshes()
+    if (this.periodicRefreshId) {
+      window.clearInterval(this.periodicRefreshId)
+      this.periodicRefreshId = null
+    }
   }
 
   handleKeydown(event) {
@@ -324,7 +341,44 @@ export default class extends Controller {
 
   refresh() {
     this.traceAction("refresh")
+    this.requestRefresh("manual", { force: true })
+  }
+
+  requestRefresh(reason, { force = false } = {}) {
+    if (!force) {
+      if (document.visibilityState !== "visible") return
+      if (this.isModalOpen()) return
+      if (reason === "periodic" && this.isTerminalPanelVisible()) return
+
+      const now = Date.now()
+      if (now - this.lastAutoRefreshAt < 1500) return
+      this.lastAutoRefreshAt = now
+    }
+
     Turbo.visit(window.location.href, { action: "replace" })
+  }
+
+  handleExternalRefresh(event) {
+    const detail = event?.detail || {}
+    const delays = Array.isArray(detail.delaysMs) ? detail.delaysMs : [900, 2200]
+    this.clearScheduledRefreshes()
+
+    delays.forEach((delayMs) => {
+      const timeoutId = window.setTimeout(() => {
+        this.requestRefresh("terminal")
+      }, Math.max(0, Number(delayMs) || 0))
+      this.refreshTimeoutIds.push(timeoutId)
+    })
+  }
+
+  clearScheduledRefreshes() {
+    this.refreshTimeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    this.refreshTimeoutIds = []
+  }
+
+  isTerminalPanelVisible() {
+    const panel = document.querySelector(".terminal-panel")
+    return panel?.dataset?.visible === "true"
   }
 
   async openProjectPicker() {
@@ -572,6 +626,7 @@ export default class extends Controller {
     this.mergeConflictTargetTarget.textContent = this.pendingMergeConflict.targetBranch
     this.mergeConflictFilesTarget.textContent = files.length > 0 ? files.join("\n") : "(none reported)"
     this.mergeConflictModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.mergeConflictManualTarget)
   }
 
   cancelMergeConflictResolution(event) {
@@ -689,6 +744,7 @@ export default class extends Controller {
     this.replaceBranchTarget.textContent = branchName
     this.createModalTarget.classList.add("hidden")
     this.replaceModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.replaceCancelTarget)
   }
 
   cancelReplaceCreate(event) {
@@ -802,6 +858,7 @@ export default class extends Controller {
     this.deleteBranchTarget.textContent = branch
     this.deleteDirtyTarget.textContent = dirty ? "yes" : "no"
     this.deleteModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.deleteCancelTarget)
   }
 
   cancelDelete(event) {
@@ -1038,6 +1095,11 @@ export default class extends Controller {
     } finally {
       this.openTerminalInFlight = false
     }
+  }
+
+  focusDefaultChoice(element) {
+    if (!(element instanceof HTMLElement)) return
+    requestAnimationFrame(() => element.focus())
   }
 
 }
