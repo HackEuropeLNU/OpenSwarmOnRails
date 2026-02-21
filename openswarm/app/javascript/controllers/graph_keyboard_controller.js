@@ -1,11 +1,18 @@
 import { Controller } from "@hotwired/stimulus"
 
+const TAG = "[DEBUG:graph_keyboard]"
+
 // Handles keyboard navigation and node selection for the worktree graph.
 export default class extends Controller {
   static targets = ["canvas", "node", "details"]
   static values = { selected: String, createUrl: String, openUrl: String, repo: String }
 
   connect() {
+    console.log(TAG, "connect", {
+      nodeCount: this.nodeTargets.length,
+      selected: this.selectedValue,
+      isDesktop: typeof window.desktopShell?.terminal?.create === "function"
+    })
     this.boundKeydown = this.handleKeydown.bind(this)
     document.addEventListener("keydown", this.boundKeydown)
     this.highlightSelected()
@@ -103,6 +110,7 @@ export default class extends Controller {
       termPanel?.classList.contains("hidden")
 
     if (isAlive) {
+      console.log(TAG, "openSelectedTerminal -> toggling alive hidden terminal")
       window.dispatchEvent(new CustomEvent("worktree:toggle-terminal"))
       return
     }
@@ -112,6 +120,7 @@ export default class extends Controller {
     )
 
     if (!selectedNode) return
+    console.log(TAG, "openSelectedTerminal -> opening selected node", { nodeId: selectedNode.dataset.nodeId })
     this.openTerminal(selectedNode.dataset.nodeId)
   }
 
@@ -215,16 +224,22 @@ export default class extends Controller {
 
     // Desktop mode: resolve path from DOM and open PTY directly (skip Rails PTY)
     const isDesktop = typeof window.desktopShell?.terminal?.create === "function"
+    console.log(TAG, "openTerminal called", { worktreeId, isDesktop })
     if (isDesktop) {
       const node = this.nodeTargets.find((n) => n.dataset.nodeId === worktreeId)
       const path = node?.dataset.path
-      if (!path) return
+      console.log(TAG, "desktop path lookup", { foundNode: !!node, path })
+      if (!path) {
+        console.error(TAG, "desktop path missing for node", { worktreeId })
+        return
+      }
 
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
           detail: { path }
         })
       )
+      console.log(TAG, "dispatched worktree:open-terminal", { path })
       return
     }
 
@@ -251,11 +266,13 @@ export default class extends Controller {
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
+        console.error(TAG, "browser open terminal failed", { status: response.status, payload })
         window.alert(payload.error || "Failed to open terminal")
         return
       }
 
       const payload = await response.json().catch(() => ({}))
+      console.log(TAG, "browser open terminal success", payload)
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
           detail: payload

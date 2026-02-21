@@ -1,6 +1,8 @@
 const { app, BrowserWindow, shell, ipcMain } = require("electron");
 const { TerminalManager } = require("./terminal-manager");
 
+const TAG = "[DEBUG:main]";
+
 const DEFAULT_BACKEND_URL = "http://localhost:3000";
 const BACKEND_URL = process.env.BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_WAIT_MS = Number(process.env.BACKEND_WAIT_MS || 20000);
@@ -11,6 +13,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitForBackend(url, timeoutMs) {
   const startedAt = Date.now();
+  console.log(TAG, "waitForBackend() start", { url, timeoutMs });
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
@@ -20,6 +23,7 @@ async function waitForBackend(url, timeoutMs) {
       clearTimeout(timeoutId);
 
       if (response.ok || response.status >= 300) {
+        console.log(TAG, "waitForBackend() ready", { status: response.status });
         return true;
       }
     } catch (_error) {
@@ -29,6 +33,7 @@ async function waitForBackend(url, timeoutMs) {
     await sleep(500);
   }
 
+  console.log(TAG, "waitForBackend() timed out");
   return false;
 }
 
@@ -89,6 +94,7 @@ function offlinePage(url) {
 function setupTerminalIPC() {
   ipcMain.handle("terminal:create", (_event, { cwd, cols, rows }) => {
     const sender = _event.sender;
+    console.log(TAG, "IPC terminal:create", { cwd, cols, rows, senderId: sender.id });
 
     const result = terminalManager.create({
       cwd,
@@ -96,43 +102,60 @@ function setupTerminalIPC() {
       rows,
       onData: (sessionId, data) => {
         if (!sender.isDestroyed()) {
-          sender.send("terminal:data", { sessionId, data });
+          if (data.length > 0) {
+            sender.send("terminal:data", { sessionId, data });
+          }
+        } else {
+          console.log(TAG, "IPC terminal:data dropped, sender destroyed", { sessionId });
         }
       },
       onExit: (sessionId, exitCode) => {
         if (!sender.isDestroyed()) {
+          console.log(TAG, "IPC terminal:exit send", { sessionId, exitCode });
           sender.send("terminal:exit", { sessionId, exitCode });
         }
       }
     });
 
+    console.log(TAG, "IPC terminal:create result", result);
     return result;
   });
 
   ipcMain.handle("terminal:write", (_event, { sessionId, data }) => {
+    if (data && data.trim()) {
+      console.log(TAG, "IPC terminal:write", { sessionId, len: data.length, preview: JSON.stringify(data.slice(0, 60)) });
+    }
     return terminalManager.write(sessionId, data);
   });
 
   ipcMain.handle("terminal:resize", (_event, { sessionId, cols, rows }) => {
+    console.log(TAG, "IPC terminal:resize", { sessionId, cols, rows });
     return terminalManager.resize(sessionId, cols, rows);
   });
 
   ipcMain.handle("terminal:ack", (_event, { sessionId, charCount }) => {
+    if (charCount >= 5000) {
+      console.log(TAG, "IPC terminal:ack", { sessionId, charCount });
+    }
     terminalManager.ack(sessionId, charCount);
   });
 
   ipcMain.handle("terminal:kill", (_event, { sessionId }) => {
+    console.log(TAG, "IPC terminal:kill", { sessionId });
     return terminalManager.kill(sessionId);
   });
 
   ipcMain.handle("terminal:list", () => {
-    return terminalManager.list();
+    const sessions = terminalManager.list();
+    console.log(TAG, "IPC terminal:list", { count: sessions.length });
+    return sessions;
   });
 }
 
 // ── Window creation ──
 
 async function createWindow() {
+  console.log(TAG, "createWindow()", { BACKEND_URL, BACKEND_WAIT_MS });
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -154,13 +177,16 @@ async function createWindow() {
   const backendReady = await waitForBackend(BACKEND_URL, BACKEND_WAIT_MS);
 
   if (backendReady) {
+    console.log(TAG, "loading backend URL", BACKEND_URL);
     await win.loadURL(BACKEND_URL);
   } else {
+    console.log(TAG, "loading offline page");
     await win.loadURL(offlinePage(BACKEND_URL));
   }
 }
 
 app.whenReady().then(() => {
+  console.log(TAG, "app.whenReady()");
   setupTerminalIPC();
   createWindow();
 
@@ -172,11 +198,13 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  console.log(TAG, "window-all-closed");
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
+  console.log(TAG, "before-quit -> destroyAll terminals");
   terminalManager.destroyAll();
 });

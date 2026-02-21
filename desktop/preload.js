@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const TAG = "[DEBUG:preload]";
+
+console.log(TAG, "preload script initialized");
+
 contextBridge.exposeInMainWorld("desktopShell", {
   platform: process.platform,
 
@@ -10,7 +14,10 @@ contextBridge.exposeInMainWorld("desktopShell", {
      * @param {{ cwd: string, cols?: number, rows?: number }} opts
      * @returns {Promise<{ sessionId: string, shell: string, cwd: string }>}
      */
-    create: (opts) => ipcRenderer.invoke("terminal:create", opts),
+    create: (opts) => {
+      console.log(TAG, "terminal.create", opts);
+      return ipcRenderer.invoke("terminal:create", opts);
+    },
 
     /** Write input to a PTY session. */
     write: (sessionId, data) => ipcRenderer.invoke("terminal:write", { sessionId, data }),
@@ -22,23 +29,37 @@ contextBridge.exposeInMainWorld("desktopShell", {
     ack: (sessionId, charCount) => ipcRenderer.invoke("terminal:ack", { sessionId, charCount }),
 
     /** Kill a PTY session. */
-    kill: (sessionId) => ipcRenderer.invoke("terminal:kill", { sessionId }),
+    kill: (sessionId) => {
+      console.log(TAG, "terminal.kill", { sessionId });
+      return ipcRenderer.invoke("terminal:kill", { sessionId });
+    },
 
     /** List all active sessions. */
-    list: () => ipcRenderer.invoke("terminal:list"),
+    list: () => {
+      console.log(TAG, "terminal.list");
+      return ipcRenderer.invoke("terminal:list");
+    },
 
     /** Subscribe to PTY output data. Callback receives (sessionId, data). */
     onData: (callback) => {
       const handler = (_event, { sessionId, data }) => callback(sessionId, data);
+      console.log(TAG, "terminal.onData subscribed");
       ipcRenderer.on("terminal:data", handler);
-      return () => ipcRenderer.removeListener("terminal:data", handler);
+      return () => {
+        console.log(TAG, "terminal.onData unsubscribed");
+        ipcRenderer.removeListener("terminal:data", handler);
+      };
     },
 
     /** Subscribe to PTY exit events. Callback receives (sessionId, exitCode). */
     onExit: (callback) => {
       const handler = (_event, { sessionId, exitCode }) => callback(sessionId, exitCode);
+      console.log(TAG, "terminal.onExit subscribed");
       ipcRenderer.on("terminal:exit", handler);
-      return () => ipcRenderer.removeListener("terminal:exit", handler);
+      return () => {
+        console.log(TAG, "terminal.onExit unsubscribed");
+        ipcRenderer.removeListener("terminal:exit", handler);
+      };
     }
   }
 });
