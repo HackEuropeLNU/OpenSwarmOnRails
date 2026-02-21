@@ -35,6 +35,41 @@ class WorktreesController < ApplicationController
     @layout = compute_layout(@tree, @worktrees)
   end
 
+  def create_worktree
+    repo_name = params[:repo].to_s
+    parent_id = params[:parent_id].to_s
+    worktree_name = params[:name].to_s
+
+    repos = discover_repos
+    selected_repo = repos.find { |r| r[:name] == repo_name }
+    return render json: { error: "Repository not found" }, status: :not_found unless selected_repo
+
+    discovery = GitWorktreeService.discover(selected_repo[:root])
+    unless discovery.success
+      return render json: { error: discovery.error }, status: :unprocessable_entity
+    end
+
+    parent = discovery.data[:worktrees].find { |wt| wt.id == parent_id }
+    return render json: { error: "Parent worktree not found" }, status: :unprocessable_entity unless parent
+    return render json: { error: "Cannot create from detached HEAD" }, status: :unprocessable_entity if parent.detached
+
+    result = GitWorktreeService.create_worktree(
+      repo_root: selected_repo[:root],
+      parent_branch: parent.branch,
+      branch_name: worktree_name
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      id: result.data[:id],
+      branch: result.data[:branch],
+      redirect_url: worktrees_path(repo: repo_name, selected: result.data[:id])
+    }
+  end
+
   private
 
   def discover_repos

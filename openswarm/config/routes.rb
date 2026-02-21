@@ -5,6 +5,7 @@ Rails.application.routes.draw do
   resources :worktrees, only: [:index] do
     collection do
       post :refresh
+      post :create_worktree
     end
   end
 
