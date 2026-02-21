@@ -304,42 +304,6 @@ button:focus-visible {
   height: 100%;
 }
 
-.terminal-screen .xterm-helpers {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  overflow: visible;
-}
-
-.terminal-screen .xterm-helper-textarea {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0 !important;
-  height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: 0 !important;
-  outline: none !important;
-  background: transparent !important;
-  color: transparent !important;
-  resize: none !important;
-  pointer-events: auto !important;
-  opacity: 0 !important;
-  overflow: hidden;
-  z-index: -1000;
-}
-
-.terminal-screen .xterm-char-measure-element {
-  position: absolute;
-  top: -9999px;
-  left: -9999px;
-  visibility: hidden;
-  display: inline-block;
-}
-
 .terminal-screen .xterm-viewport {
   overflow-y: auto;
 }
