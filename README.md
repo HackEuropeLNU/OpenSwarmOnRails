@@ -1,99 +1,34 @@
-Openswarm on Rails
+# OpenSwarm on Rails
 
-## UI scaffold prototype
+OpenSwarm is a Rails app for visual Git worktree management. It shows worktrees as a graph and lets you create/delete worktrees, open terminals, and run common branch workflows (fetch/pull, rebase, commit, push, merge) from one UI.
 
-This repo now includes a first-pass GUI scaffold so we can iterate on look-and-feel before full Rails implementation.
+## Repo layout
 
-- Prototype path: `ui_scaffold/index.html`
-- Stack: Vue 3 (CDN) + Tailwind CSS (CDN)
-- Includes: graph canvas, branch nodes, details panel, actions panel, keyboard-first interactions
+- `openswarm/` - main Rails 8.1 app (Hotwire + Tailwind + ActionCable)
+- `desktop/` - Electron shell for running the Rails UI as a desktop app (macOS DMG support)
+- `ui_scaffold/` - static early UI prototype
 
-### Run locally
+## Quick start
 
-Backend-first mode (recommended):
+Prereqs: Ruby `3.3.10`, Bundler, Node.js/npm, Git.
 
 ```bash
+# from repo root
 make dev-backend
 ```
 
-Then open `http://localhost:3000/`.
-This command now runs both the Rails server and the Tailwind watcher.
+Then open `http://localhost:3000`.
 
-If your repo root is not auto-detected, set it explicitly:
-
-```bash
-OPENSWARM_REPO_ROOTS="/absolute/path/to/your/repo" make dev-backend
-```
-
-Use multiple roots by separating them with `:`.
-
-If your Rails app directory is named differently, override it:
+If your target repo is not auto-detected:
 
 ```bash
-OPENSWARMONRAILS_DIR="openswarmonrails" make dev-backend
+OPENSWARM_REPO_ROOTS="/absolute/path/to/repo" make dev-backend
 ```
 
-### Desktop app (Electron, macOS)
+## Useful commands
 
-For local desktop testing on macOS, this repo includes an Electron shell in `desktop/`.
-
-1) Start backend + desktop shell together:
-
-```bash
-make electron-dev
-```
-
-2) Build a `.dmg`:
-
-```bash
-make electron-dmg
-```
-
-Artifacts are written to `desktop/dist/`.
-
-### Iterating on versions and cleanup
-
-- Clear desktop build artifacts and Electron caches:
-
-```bash
-make electron-clean
-```
-
-- Bump `version` in `desktop/package.json` before release-style builds so each DMG has a distinct filename.
-- Optional local app state reset between iterations:
-
-```bash
-rm -rf "$HOME/Library/Application Support/OpenSwarm"
-```
-
-Start backend + frontend together:
-
-```bash
-make dev
-```
-
-- Backend (Rails): `http://localhost:3000/`
-- Frontend scaffold: `http://localhost:4173/ui_scaffold/`
-
-You can also run each service separately:
-
-```bash
-make dev-backend
-make dev-frontend
-```
-
-From this repository root, run:
-
-```bash
-python3 -m http.server 4173
-```
-
-Then open `http://localhost:4173/ui_scaffold/`.
-
-Note: the scaffold is static UI only. Creating worktrees and opening terminals are implemented in the Rails app at `http://localhost:3000/`.
-
-### Keyboard hints
-
-- `j` / `k`: move selected worktree node
-- `Ctrl/Cmd + B`: cycle background mode (stars, grid, flat)
-- `t`: toggle dark/light theme
+- `make dev` - Rails app + Tailwind watcher + static scaffold server
+- `make dev-frontend` - serve `ui_scaffold/` only
+- `make electron-dev` - run Rails + desktop shell
+- `make electron-dmg` - build desktop `.dmg` into `desktop/dist/`
+- `make electron-clean` - remove desktop build artifacts
