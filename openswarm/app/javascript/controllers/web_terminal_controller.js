@@ -3,15 +3,24 @@ import { Terminal } from "xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import consumer from "../cable_consumer"
 
+// ── Detect desktop mode (Electron with node-pty IPC) ──
+const desktopTerminal = window.desktopShell?.terminal
+const isDesktop = typeof desktopTerminal?.create === "function"
+
+// ── Flow control: batch ack every N chars ──
+const ACK_BATCH_SIZE = 5000
+
 export default class extends Controller {
   static targets = ["panel", "terminal", "path", "shell", "status"]
 
   connect() {
-    this.subscription = null
+    this.subscription = null  // ActionCable subscription (browser mode)
     this.term = null
     this.fitAddon = null
     this.sessionId = null
     this.panelVisible = false
+    this.unackedChars = 0     // renderer-side flow control counter
+    this.ipcCleanups = []     // IPC listener cleanup functions
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -22,6 +31,29 @@ export default class extends Controller {
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
+
+    // Desktop: subscribe to PTY events globally
+    if (isDesktop) {
+      const offData = desktopTerminal.onData((sessionId, data) => {
+        if (sessionId !== this.sessionId || !this.term) return
+        this.term.write(data)
+
+        // Flow control ACK
+        this.unackedChars += data.length
+        if (this.unackedChars >= ACK_BATCH_SIZE) {
+          desktopTerminal.ack(sessionId, this.unackedChars)
+          this.unackedChars = 0
+        }
+      })
+
+      const offExit = desktopTerminal.onExit((sessionId, _exitCode) => {
+        if (sessionId !== this.sessionId) return
+        this.statusTarget.textContent = "exited"
+        this.sessionId = null
+      })
+
+      this.ipcCleanups.push(offData, offExit)
+    }
   }
 
   disconnect() {
@@ -29,6 +61,10 @@ export default class extends Controller {
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
+
+    this.ipcCleanups.forEach((fn) => fn())
+    this.ipcCleanups = []
+
     this.destroyTerminal()
   }
 
@@ -38,7 +74,6 @@ export default class extends Controller {
     this.panelTarget.classList.remove("hidden")
     this.panelVisible = true
 
-    // Re-fit after CSS transition reveals the element
     requestAnimationFrame(() => {
       if (this.fitAddon && this.term) {
         this.fitAddon.fit()
@@ -56,7 +91,6 @@ export default class extends Controller {
     if (this.panelVisible) {
       this.hidePanel()
     } else if (this.sessionId) {
-      // Only toggle back if there is a live session
       this.showPanel()
     }
   }
@@ -75,6 +109,65 @@ export default class extends Controller {
 
   openFromEvent(event) {
     const payload = event.detail || {}
+
+    // Desktop mode: payload has `path` from the worktree, we create PTY directly
+    if (isDesktop) {
+      this._openDesktopTerminal(payload)
+      return
+    }
+
+    // Browser mode: payload has `session_id` from Rails backend
+    if (!payload.session_id) return
+    this._openBrowserTerminal(payload)
+  }
+
+  async _openDesktopTerminal(payload) {
+    const path = payload.path
+    if (!path) return
+
+    // If we already have a live session, just re-show
+    if (this.sessionId) {
+      this.showPanel()
+      return
+    }
+
+    this.destroyTerminal()
+
+    this.pathTarget.textContent = path
+    this.statusTarget.textContent = "creating"
+
+    this.showPanel()
+    this.setupTerminal()
+
+    const cols = this.term?.cols || 80
+    const rows = this.term?.rows || 24
+
+    try {
+      const result = await desktopTerminal.create({ cwd: path, cols, rows })
+      this.sessionId = result.sessionId
+      this.shellTarget.textContent = result.shell
+      this.statusTarget.textContent = "connected"
+
+      // Wire input: keystrokes -> IPC -> PTY
+      this.term.onData((data) => {
+        if (!this.sessionId) return
+        desktopTerminal.write(this.sessionId, data)
+      })
+
+      // Wire resize: xterm resize -> IPC -> PTY
+      this.term.onResize(({ cols, rows }) => {
+        if (!this.sessionId) return
+        desktopTerminal.resize(this.sessionId, cols, rows)
+      })
+
+      this.term.focus()
+    } catch (err) {
+      this.statusTarget.textContent = "error"
+      console.error("Failed to create desktop terminal:", err)
+    }
+  }
+
+  _openBrowserTerminal(payload) {
     if (!payload.session_id) return
 
     // If we already have this session, just re-show
@@ -83,7 +176,6 @@ export default class extends Controller {
       return
     }
 
-    // Tear down any previous session before opening a new one
     this.destroyTerminal()
 
     this.pathTarget.textContent = payload.path || ""
@@ -101,7 +193,7 @@ export default class extends Controller {
     }
   }
 
-  // ── Terminal setup ──
+  // ── Terminal setup (shared between desktop and browser) ──
 
   setupTerminal() {
     if (this.term) {
@@ -145,17 +237,9 @@ export default class extends Controller {
     this.term.loadAddon(this.fitAddon)
     this.term.open(this.terminalTarget)
     this.fitAddon.fit()
-
-    this.term.onData((data) => {
-      if (!this.subscription) return
-      this.subscription.perform("input", { data })
-    })
-
-    this.term.onResize(({ cols, rows }) => {
-      if (!this.subscription) return
-      this.subscription.perform("resize", { cols, rows })
-    })
   }
+
+  // ── ActionCable connection (browser mode only) ──
 
   connectSubscription(sessionId) {
     this.disconnectSubscription()
@@ -191,14 +275,32 @@ export default class extends Controller {
         }
       }
     )
+
+    // Wire input for browser mode
+    this.term.onData((data) => {
+      if (!this.subscription) return
+      this.subscription.perform("input", { data })
+    })
+
+    this.term.onResize(({ cols, rows }) => {
+      if (!this.subscription) return
+      this.subscription.perform("resize", { cols, rows })
+    })
   }
 
   resizeTerminal() {
-    if (!this.term || !this.fitAddon || !this.subscription) return
+    if (!this.term || !this.fitAddon) return
 
     this.fitAddon.fit()
-    this.subscription.perform("resize", { cols: this.term.cols, rows: this.term.rows })
+
+    if (isDesktop && this.sessionId) {
+      desktopTerminal.resize(this.sessionId, this.term.cols, this.term.rows)
+    } else if (this.subscription) {
+      this.subscription.perform("resize", { cols: this.term.cols, rows: this.term.rows })
+    }
   }
+
+  // ── Cleanup ──
 
   disconnectSubscription() {
     if (!this.subscription) return
@@ -210,7 +312,14 @@ export default class extends Controller {
   }
 
   destroyTerminal() {
+    // Desktop: kill PTY via IPC
+    if (isDesktop && this.sessionId) {
+      desktopTerminal.kill(this.sessionId)
+    }
+
     this.disconnectSubscription()
+    this.sessionId = null
+    this.unackedChars = 0
 
     if (this.term) {
       this.term.dispose()

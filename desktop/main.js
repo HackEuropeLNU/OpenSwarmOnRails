@@ -1,8 +1,11 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { TerminalManager } = require("./terminal-manager");
 
 const DEFAULT_BACKEND_URL = "http://localhost:3000";
 const BACKEND_URL = process.env.BACKEND_URL || DEFAULT_BACKEND_URL;
 const BACKEND_WAIT_MS = Number(process.env.BACKEND_WAIT_MS || 20000);
+
+const terminalManager = new TerminalManager();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -81,6 +84,54 @@ function offlinePage(url) {
 `)}`;
 }
 
+// ── IPC handlers for terminal management ──
+
+function setupTerminalIPC() {
+  ipcMain.handle("terminal:create", (_event, { cwd, cols, rows }) => {
+    const sender = _event.sender;
+
+    const result = terminalManager.create({
+      cwd,
+      cols,
+      rows,
+      onData: (sessionId, data) => {
+        if (!sender.isDestroyed()) {
+          sender.send("terminal:data", { sessionId, data });
+        }
+      },
+      onExit: (sessionId, exitCode) => {
+        if (!sender.isDestroyed()) {
+          sender.send("terminal:exit", { sessionId, exitCode });
+        }
+      }
+    });
+
+    return result;
+  });
+
+  ipcMain.handle("terminal:write", (_event, { sessionId, data }) => {
+    return terminalManager.write(sessionId, data);
+  });
+
+  ipcMain.handle("terminal:resize", (_event, { sessionId, cols, rows }) => {
+    return terminalManager.resize(sessionId, cols, rows);
+  });
+
+  ipcMain.handle("terminal:ack", (_event, { sessionId, charCount }) => {
+    terminalManager.ack(sessionId, charCount);
+  });
+
+  ipcMain.handle("terminal:kill", (_event, { sessionId }) => {
+    return terminalManager.kill(sessionId);
+  });
+
+  ipcMain.handle("terminal:list", () => {
+    return terminalManager.list();
+  });
+}
+
+// ── Window creation ──
+
 async function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -110,6 +161,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
+  setupTerminalIPC();
   createWindow();
 
   app.on("activate", () => {
@@ -123,4 +175,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  terminalManager.destroyAll();
 });
