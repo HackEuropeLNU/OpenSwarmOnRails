@@ -90,12 +90,12 @@
                style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;">
             <button type="button"
                     class="w-full cursor-pointer transition-all duration-200 ease-out focus:outline-none"
-                    data-action="click->graph-keyboard#selectNode"
+                    data-action="click->graph-keyboard#selectNode dblclick->graph-keyboard#openNodeTerminal"
                     data-node-id="<%= wt.id %>"
                     data-path="<%= wt.path %>"
                     data-branch="<%= wt.branch %>"
                     data-dirty="<%= wt.dirty %>"
-                    title="Open terminal in this worktree"
+                    title="Click to select, double-click to open terminal"
                     data-graph-keyboard-target="node">
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
                         bg-white/95 backdrop-blur-sm

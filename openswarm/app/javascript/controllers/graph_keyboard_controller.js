@@ -33,6 +33,7 @@ export default class extends Controller {
     })
     this.boundKeydown = this.handleKeydown.bind(this)
     document.addEventListener("keydown", this.boundKeydown)
+    this.pendingSelectTimeout = null
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
     this.highlightSelected()
@@ -40,6 +41,7 @@ export default class extends Controller {
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
+    this.clearPendingSelect()
   }
 
   handleKeydown(event) {
@@ -109,6 +111,22 @@ export default class extends Controller {
     const nodeId = button.dataset.nodeId
     if (!nodeId) return
 
+    this.clearPendingSelect()
+    this.pendingSelectTimeout = window.setTimeout(() => {
+      this.pendingSelectTimeout = null
+      if (nodeId !== this.selectedValue) {
+        this.navigateToNode(nodeId)
+      }
+    }, 220)
+  }
+
+  async openNodeTerminal(event) {
+    this.traceAction("open-terminal")
+    const button = event.currentTarget
+    const nodeId = button.dataset.nodeId
+    if (!nodeId) return
+
+    this.clearPendingSelect()
     await this.openTerminal(nodeId)
   }
 
@@ -363,6 +381,13 @@ export default class extends Controller {
     const message = `click (${action})`
     console.log(TAG, message)
     window.dispatchEvent(new CustomEvent("worktree:action-click", { detail: { message } }))
+  }
+
+  clearPendingSelect() {
+    if (!this.pendingSelectTimeout) return
+
+    window.clearTimeout(this.pendingSelectTimeout)
+    this.pendingSelectTimeout = null
   }
 
   async parseJsonResponse(response) {
