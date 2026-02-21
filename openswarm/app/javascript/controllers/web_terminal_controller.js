@@ -17,7 +17,16 @@ const isDesktop = typeof desktopTerminal?.create === "function"
 const ACK_BATCH_SIZE = 5000
 
 export default class extends Controller {
-  static targets = ["panel", "terminal", "path", "shell", "status"]
+  static targets = [
+    "panel",
+    "terminal",
+    "path",
+    "shell",
+    "status",
+    "backgroundIndicator",
+    "backgroundSpinner",
+    "backgroundLabel"
+  ]
 
   connect() {
     debug("connect", { isDesktop })
@@ -28,6 +37,11 @@ export default class extends Controller {
     this.panelVisible = false
     this.unackedChars = 0     // renderer-side flow control counter
     this.ipcCleanups = []     // IPC listener cleanup functions
+    this.spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    this.spinnerFrameIndex = 0
+    this.spinnerIntervalId = null
+    this.activityTimeoutId = null
+    this.isBackgroundBusy = false
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -48,6 +62,7 @@ export default class extends Controller {
           debug("first terminal:data chunk", { sessionId, len: data.length, preview: data.slice(0, 80) })
         }
         this.term.write(data)
+        this.recordOutputActivity()
 
         // Flow control ACK
         this.unackedChars += data.length
@@ -63,6 +78,8 @@ export default class extends Controller {
         debug("received terminal:exit", { sessionId })
         this.statusTarget.textContent = "exited"
         this.sessionId = null
+        this.clearBackgroundActivity()
+        this.updateBackgroundIndicator()
       })
 
       this.ipcCleanups.push(offData, offExit)
@@ -80,6 +97,8 @@ export default class extends Controller {
     this.ipcCleanups = []
 
     this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
+    this.clearBackgroundActivity()
+    this.updateBackgroundIndicator()
   }
 
   // ── Show / hide without destroying the PTY ──
@@ -88,6 +107,7 @@ export default class extends Controller {
     debug("showPanel")
     this.panelTarget.classList.remove("hidden")
     this.panelVisible = true
+    this.updateBackgroundIndicator()
 
     requestAnimationFrame(() => {
       this.resizeTerminal()
@@ -102,6 +122,7 @@ export default class extends Controller {
     debug("hidePanel")
     this.panelTarget.classList.add("hidden")
     this.panelVisible = false
+    this.updateBackgroundIndicator()
   }
 
   togglePanel() {
@@ -114,6 +135,12 @@ export default class extends Controller {
 
   closePanel() {
     this.hidePanel()
+  }
+
+  reopenFromIndicator(event) {
+    event?.preventDefault?.()
+    if (!this.sessionId) return
+    this.showPanel()
   }
 
   backdropClose(event) {
@@ -192,6 +219,7 @@ export default class extends Controller {
 
       this.term.focus()
       this.resizeTerminal()
+      this.updateBackgroundIndicator()
     } catch (err) {
       this.statusTarget.textContent = "error"
       console.error("Failed to create desktop terminal:", err)
@@ -216,6 +244,7 @@ export default class extends Controller {
     this.showPanel()
     this.setupTerminal()
     this.connectSubscription(payload.session_id)
+    this.updateBackgroundIndicator()
   }
 
   handleEscape(event) {
@@ -295,6 +324,7 @@ export default class extends Controller {
           if (!this.term) return
 
           if (message.type === "output") {
+            this.recordOutputActivity()
             if (message.encoding === "base64") {
               this.term.write(this.decodeBase64(message.data || ""))
             } else {
@@ -303,6 +333,8 @@ export default class extends Controller {
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
             this.sessionId = null
+            this.clearBackgroundActivity()
+            this.updateBackgroundIndicator()
           }
         }
       }
@@ -357,6 +389,8 @@ export default class extends Controller {
     this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
     this.sessionId = null
     this.unackedChars = 0
+    this.clearBackgroundActivity()
+    this.updateBackgroundIndicator()
 
     if (this.term) {
       this.term.dispose()
@@ -385,4 +419,66 @@ export default class extends Controller {
     return bytes
   }
 
+  traceActionClick(event) {
+    const message = event?.detail?.message || "click (unknown-action)"
+    console.log(TAG, message)
+    if (!this.term) return
+    this.term.writeln(`\r\n${message}`)
+  }
+
+  recordOutputActivity() {
+    this.isBackgroundBusy = true
+    this.startSpinner()
+    this.updateBackgroundIndicator()
+
+    if (this.activityTimeoutId) {
+      clearTimeout(this.activityTimeoutId)
+    }
+
+    this.activityTimeoutId = setTimeout(() => {
+      this.isBackgroundBusy = false
+      this.stopSpinner()
+      this.updateBackgroundIndicator()
+    }, 900)
+  }
+
+  startSpinner() {
+    if (this.spinnerIntervalId || !this.hasBackgroundSpinnerTarget) return
+
+    this.backgroundSpinnerTarget.textContent = this.spinnerFrames[this.spinnerFrameIndex]
+    this.spinnerIntervalId = setInterval(() => {
+      this.spinnerFrameIndex = (this.spinnerFrameIndex + 1) % this.spinnerFrames.length
+      this.backgroundSpinnerTarget.textContent = this.spinnerFrames[this.spinnerFrameIndex]
+    }, 80)
+  }
+
+  stopSpinner() {
+    if (this.spinnerIntervalId) {
+      clearInterval(this.spinnerIntervalId)
+      this.spinnerIntervalId = null
+    }
+
+    if (this.hasBackgroundSpinnerTarget) {
+      this.backgroundSpinnerTarget.textContent = "⠿"
+    }
+  }
+
+  clearBackgroundActivity() {
+    this.isBackgroundBusy = false
+    this.stopSpinner()
+    if (this.activityTimeoutId) {
+      clearTimeout(this.activityTimeoutId)
+      this.activityTimeoutId = null
+    }
+  }
+
+  updateBackgroundIndicator() {
+    if (!this.hasBackgroundIndicatorTarget) return
+
+    const shouldShow = Boolean(this.sessionId) && !this.panelVisible
+    this.backgroundIndicatorTarget.classList.toggle("hidden", !shouldShow)
+
+    if (!this.hasBackgroundLabelTarget) return
+    this.backgroundLabelTarget.textContent = this.isBackgroundBusy ? "agent working" : "terminal idle"
+  }
 }
