@@ -293,6 +293,30 @@ class WorktreesController < ApplicationController
     )
 
     unless result.success
+      if result.data&.[](:conflict)
+        conflict_context = {
+          parent_id: result.data[:parent_id],
+          parent_path: result.data[:parent_path],
+          source_branch: result.data[:source_branch],
+          target_branch: result.data[:target_branch],
+          conflicted_files: result.data[:conflicted_files] || []
+        }
+
+        prompt = PromptTemplateService.merge_conflict_resolver_prompt(
+          parent_path: conflict_context[:parent_path],
+          source_branch: conflict_context[:source_branch],
+          target_branch: conflict_context[:target_branch],
+          conflicted_files: conflict_context[:conflicted_files]
+        )
+
+        return render json: {
+          error: result.error,
+          conflict: true,
+          conflict_context: conflict_context,
+          prompt: prompt
+        }, status: :conflict
+      end
+
       return render json: { error: result.error }, status: :unprocessable_entity
     end
 

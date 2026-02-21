@@ -1,0 +1,3 @@
+{
+  "merge_conflict_resolver": "Resolve the current Git merge conflict in this worktree.\n\nContext:\n- Parent worktree path: {parent_path}\n- Merge source branch: {source_branch}\n- Merge target branch: {target_branch}\n- Conflicted files:\n{conflicted_files}\n\nInstructions:\n1) Inspect conflict markers and resolve carefully; prefer minimal safe edits.\n2) Keep intended behavior from both branches when possible.\n3) Run `git diff --name-only --diff-filter=U` and ensure it is empty.\n4) Stage resolved files with `git add`.\n5) Summarize what was resolved and any risks.\n6) Do not push. Stop after conflicts are resolved and staged."
+}
