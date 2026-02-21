@@ -148,9 +148,6 @@ function buildLinks(nodes) {
 createApp({
   data() {
     return {
-      theme: "dark",
-      bgModes: ["stars", "grid", "flat"],
-      bgIndex: 0,
       selectedNodeId: null,
       nodes: [],
       actions: DEFAULT_ACTIONS,
@@ -158,29 +155,9 @@ createApp({
       connectedProjectHandle: null,
       connectError: null,
       isConnectingProject: false,
-      stars: [
-        { id: 1, x: 4, y: 9, size: 1, opacity: 0.9 },
-        { id: 2, x: 11, y: 24, size: 2, opacity: 0.6 },
-        { id: 3, x: 18, y: 68, size: 1, opacity: 0.65 },
-        { id: 4, x: 22, y: 41, size: 1, opacity: 0.7 },
-        { id: 5, x: 29, y: 17, size: 2, opacity: 0.85 },
-        { id: 6, x: 36, y: 88, size: 1, opacity: 0.8 },
-        { id: 7, x: 43, y: 51, size: 2, opacity: 0.8 },
-        { id: 8, x: 48, y: 30, size: 1, opacity: 0.6 },
-        { id: 9, x: 57, y: 12, size: 1, opacity: 0.8 },
-        { id: 10, x: 64, y: 72, size: 2, opacity: 0.75 },
-        { id: 11, x: 71, y: 38, size: 1, opacity: 0.6 },
-        { id: 12, x: 79, y: 10, size: 1, opacity: 0.92 },
-        { id: 13, x: 85, y: 66, size: 2, opacity: 0.85 },
-        { id: 14, x: 92, y: 28, size: 1, opacity: 0.88 },
-        { id: 15, x: 96, y: 81, size: 1, opacity: 0.7 },
-      ],
     };
   },
   computed: {
-    bgMode() {
-      return this.bgModes[this.bgIndex];
-    },
     links() {
       return buildLinks(this.nodes);
     },
@@ -199,46 +176,8 @@ createApp({
         behind: this.nodes.filter((node) => node.behind > 0).length,
       };
     },
-    cardClass() {
-      return this.theme === "dark"
-        ? "border-[#8d92ad] bg-[#22233a]/50"
-        : "border-[#c3cad6] bg-[#f7f8fb]/80";
-    },
-    backgroundStyle() {
-      if (this.theme === "dark" && this.bgMode === "stars") {
-        return {
-          background:
-            "radial-gradient(circle at 15% 15%, #33355e 0%, transparent 30%), radial-gradient(circle at 80% 70%, #1c3757 0%, transparent 35%), #17162a",
-        };
-      }
-
-      if (this.theme === "dark" && this.bgMode === "grid") {
-        return {
-          background:
-            "radial-gradient(circle, rgba(124,162,237,0.24) 1px, transparent 1px), radial-gradient(circle at 15% 15%, #33355e 0%, transparent 30%), radial-gradient(circle at 80% 70%, #1c3757 0%, transparent 35%), #17162a",
-          backgroundSize: "22px 22px, auto, auto, auto",
-        };
-      }
-
-      if (this.theme === "light" && this.bgMode === "grid") {
-        return {
-          background: "radial-gradient(circle, rgba(127,139,164,0.25) 1px, transparent 1px), #eceef2",
-          backgroundSize: "20px 20px",
-        };
-      }
-
-      return {
-        background: this.theme === "dark" ? "#17162a" : "#eceef2",
-      };
-    },
   },
   methods: {
-    toggleTheme() {
-      this.theme = this.theme === "dark" ? "light" : "dark";
-    },
-    cycleBackground() {
-      this.bgIndex = (this.bgIndex + 1) % this.bgModes.length;
-    },
     loadGraphData() {
       this.nodes = loadNodesFromWindow();
       this.selectedNodeId = this.nodes[0]?.id || null;
@@ -310,26 +249,24 @@ createApp({
         "absolute",
         "min-w-[140px]",
         "rounded-lg",
-        "border-2",
-        "px-3",
-        "py-2",
+        "border",
+        "px-4",
+        "py-3",
         "text-left",
-        "shadow",
         "transition",
         "duration-150",
-        "hover:-translate-y-px",
+        "hover:-translate-y-0.5",
+        "hover:shadow-md",
+        "bg-white",
+        "text-gray-800",
+        "border-gray-200",
+        "shadow-sm",
       ];
 
-      if (this.theme === "dark") {
-        classes.push("bg-[#1e1f34]/95", "text-[#e8ecff]", "border-[#c6c9d8]");
-      } else {
-        classes.push("bg-[#fafbfc]/90", "text-[#1c2534]", "border-[#97a1af]");
-      }
-
-      if (node.root) classes.push("border-[#e0b787]");
-      if (node.dirty) classes.push("border-[#ff4d4d]");
-      if (node.warning) classes.push("border-[#d7a55a]");
-      if (node.id === this.selectedNodeId) classes.push("border-[#259cff]");
+      if (node.root) classes.push("border-amber-300");
+      if (node.dirty) classes.push("border-red-300");
+      if (node.warning && !node.dirty) classes.push("border-amber-300");
+      if (node.id === this.selectedNodeId) classes.push("border-blue-400", "ring-1", "ring-blue-200", "shadow-blue-100");
 
       return classes;
     },
@@ -351,7 +288,7 @@ createApp({
     },
     onGlobalKeydown(event) {
       const key = event.key.toLowerCase();
-      if (key === "t") {
+      if (key === "t" && typeof this.toggleTheme === "function") {
         this.toggleTheme();
       }
 

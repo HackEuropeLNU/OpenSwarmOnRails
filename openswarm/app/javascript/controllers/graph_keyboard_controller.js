@@ -81,7 +81,7 @@ export default class extends Controller {
 
       const isSelected = node.dataset.nodeId === this.selectedValue
       if (isSelected) {
-        inner.classList.add("node-glow-selected", "ring-1", "ring-blue-400/20", "border-blue-500/40")
+        inner.classList.add("node-glow-selected", "ring-1", "ring-blue-200", "border-blue-400")
       }
     })
   }

@@ -4,23 +4,23 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-display: "Inter", system-ui, sans-serif;
 
-  --color-surface-0: #0a0e1a;
-  --color-surface-1: #0f1424;
-  --color-surface-2: #151b2e;
-  --color-surface-3: #1a2138;
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f8f9fa;
+  --color-surface-2: #f1f3f5;
+  --color-surface-3: #e9ecef;
 
-  --color-border-subtle: rgba(71, 85, 105, 0.3);
-  --color-border-default: rgba(71, 85, 105, 0.5);
-  --color-border-strong: rgba(100, 116, 139, 0.6);
+  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-border-default: rgba(0, 0, 0, 0.12);
+  --color-border-strong: rgba(0, 0, 0, 0.2);
 
-  --color-accent-blue: #3b82f6;
-  --color-accent-glow: rgba(59, 130, 246, 0.15);
+  --color-accent-blue: #2563eb;
+  --color-accent-glow: rgba(37, 99, 235, 0.08);
 }
 
 /* ═══ Base ═══ */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -33,31 +33,30 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.4);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.6);
+  background: rgba(0, 0, 0, 0.25);
 }
 
-/* ═══ Subtle glow effects for the premium feel ═══ */
+/* ═══ Node shadows ═══ */
 .node-glow {
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1),
-              0 4px 12px -2px rgba(0, 0, 0, 0.3),
-              0 0 20px -4px rgba(59, 130, 246, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06),
+              0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .node-glow-selected {
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3),
-              0 4px 16px -2px rgba(59, 130, 246, 0.15),
-              0 0 30px -4px rgba(59, 130, 246, 0.12);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2),
+              0 2px 8px rgba(37, 99, 235, 0.1),
+              0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .node-glow-dirty {
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2),
-              0 4px 12px -2px rgba(0, 0, 0, 0.3),
-              0 0 20px -4px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15),
+              0 1px 3px rgba(0, 0, 0, 0.06),
+              0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 @keyframes node-create-pop {
@@ -99,10 +98,10 @@
   animation: soft-pulse 2s ease-in-out infinite;
 }
 
-/* ═══ Grid background ═══ */
+/* ═══ Dotted grid background ═══ */
 .bg-grid {
-  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /* ═══ Kbd styling ═══ */
@@ -112,11 +111,11 @@ kbd {
 
 /* ═══ Focus styles ═══ */
 :focus-visible {
-  outline: 1px solid rgba(59, 130, 246, 0.5);
+  outline: 1px solid rgba(37, 99, 235, 0.5);
   outline-offset: 2px;
 }
 
 button:focus-visible {
-  outline: 1px solid rgba(59, 130, 246, 0.5);
+  outline: 1px solid rgba(37, 99, 235, 0.5);
   outline-offset: 2px;
 }
