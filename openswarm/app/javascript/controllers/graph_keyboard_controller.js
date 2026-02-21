@@ -741,7 +741,7 @@ export default class extends Controller {
     this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", activeRows.length > 0 || this.tokenLegendCollapsed)
 
     if (this.hasTokenLegendSummaryTarget) {
-      this.tokenLegendSummaryTarget.textContent = `idle_wt_count: ${idleWtCount} | active_wt_count: ${activeWtCount} | max_tps: ${maxRate.toFixed(1)}`
+      this.tokenLegendSummaryTarget.textContent = `idle ${idleWtCount} · active ${activeWtCount}`
     }
 
     if (this.hasTokenLegendContentTarget) {
@@ -749,13 +749,13 @@ export default class extends Controller {
     }
 
     if (this.hasTokenLegendToggleLabelTarget) {
-      this.tokenLegendToggleLabelTarget.textContent = this.tokenLegendCollapsed ? "expand" : "collapse"
+      this.tokenLegendToggleLabelTarget.textContent = this.tokenLegendCollapsed ? "show" : "hide"
     }
 
     activeRows.forEach((row) => {
       const ratio = maxRate > 0 ? row.tps / maxRate : 0
       const rowElement = document.createElement("div")
-      rowElement.className = "grid grid-cols-[minmax(0,1fr)_70px_34px] items-center gap-2"
+      rowElement.className = "grid grid-cols-[minmax(0,1fr)_76px_44px] items-center gap-2"
 
       const nameElement = document.createElement("span")
       nameElement.className = "truncate text-[10px] text-slate-300 font-mono"
@@ -772,8 +772,8 @@ export default class extends Controller {
       }
 
       const ratioElement = document.createElement("span")
-      ratioElement.className = "text-right text-[10px] text-slate-400 font-mono"
-      ratioElement.textContent = ratio.toFixed(2)
+      ratioElement.className = "text-right text-[10px] text-cyan-200 font-mono"
+      ratioElement.textContent = `${row.tps.toFixed(1)}`
 
       trackElement.appendChild(fillElement)
       rowElement.appendChild(nameElement)
