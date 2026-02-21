@@ -78,7 +78,7 @@ export default class extends Controller {
     this.ipcCleanups.forEach((fn) => fn())
     this.ipcCleanups = []
 
-    this.destroyTerminal()
+    this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
   }
 
   // ── Show / hide without destroying the PTY ──
@@ -332,23 +332,25 @@ export default class extends Controller {
 
   // ── Cleanup ──
 
-  disconnectSubscription() {
+  disconnectSubscription({ closeRemote = false } = {}) {
     if (!this.subscription) return
 
-    this.subscription.perform("close")
+    if (closeRemote) {
+      this.subscription.perform("close")
+    }
     this.subscription.unsubscribe()
     this.subscription = null
     this.sessionId = null
   }
 
-  destroyTerminal() {
+  destroyTerminal({ killRemote = true, closeRemoteBrowser = false } = {}) {
     console.log(TAG, "destroyTerminal", { isDesktop, sessionId: this.sessionId })
     // Desktop: kill PTY via IPC
-    if (isDesktop && this.sessionId) {
+    if (killRemote && isDesktop && this.sessionId) {
       desktopTerminal.kill(this.sessionId)
     }
 
-    this.disconnectSubscription()
+    this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
     this.sessionId = null
     this.unackedChars = 0
 
@@ -362,7 +364,7 @@ export default class extends Controller {
 
   killTerminal() {
     this.hidePanel()
-    this.destroyTerminal()
+    this.destroyTerminal({ killRemote: true, closeRemoteBrowser: true })
     this.statusTarget.textContent = "idle"
     this.pathTarget.textContent = ""
     this.shellTarget.textContent = ""
