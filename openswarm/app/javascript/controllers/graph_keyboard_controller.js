@@ -24,7 +24,8 @@ export default class extends Controller {
     "createModal",
     "createInput",
     "createParent",
-    "createReplace",
+    "replaceModal",
+    "replaceBranch",
     "deleteModal",
     "deleteBranch",
     "deleteDirty",
@@ -50,6 +51,7 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundKeydown)
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
+    this.pendingReplaceCreatePayload = null
     this.openTerminalInFlight = false
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
@@ -316,9 +318,6 @@ export default class extends Controller {
     this.pendingCreateParentId = parentId
     this.createParentTarget.textContent = parentBranch || "this branch"
     this.createInputTarget.value = ""
-    if (this.hasCreateReplaceTarget) {
-      this.createReplaceTarget.checked = false
-    }
     this.createModalTarget.classList.remove("hidden")
     this.createInputTarget.focus()
   }
@@ -347,49 +346,86 @@ export default class extends Controller {
       return
     }
 
-    const csrfToken = document
-      .querySelector("meta[name='csrf-token']")
-      ?.getAttribute("content")
-
     try {
-      const response = await fetch(this.createUrlValue, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "X-CSRF-Token": csrfToken
-        },
-        body: JSON.stringify({
-          repo: this.repoValue,
-          parent_id: parentId,
-          name: trimmedName,
-          replace_existing: this.hasCreateReplaceTarget ? this.createReplaceTarget.checked : false,
-          force_replace: this.hasCreateReplaceTarget ? this.createReplaceTarget.checked : false
-        })
+      const result = await this.requestCreateWorktree({
+        parentId,
+        branchName: trimmedName,
+        replaceExisting: false,
+        forceReplace: false
       })
 
-      const payload = await this.parseJsonResponse(response)
-      if (!response.ok) {
-        const message = payload.error || payload.raw || `Failed to create worktree (${response.status})`
+      if (!result.ok) {
+        if (result.conflict) {
+          this.openReplaceCreateDialog(parentId, trimmedName)
+          return
+        }
+
         console.error("Worktree create request failed", {
-          status: response.status,
-          statusText: response.statusText,
-          payload
+          message: result.message,
+          payload: result.payload
         })
-        window.alert(message)
+        window.alert(result.message)
         return
       }
 
-      if (!payload.redirect_url) {
-        console.error("Worktree create missing redirect_url", payload)
+      if (!result.payload.redirect_url) {
+        console.error("Worktree create missing redirect_url", result.payload)
         window.alert("Worktree created but response was incomplete")
         return
       }
 
       this.closeDialogs()
-      Turbo.visit(payload.redirect_url, { action: "replace" })
+      Turbo.visit(result.payload.redirect_url, { action: "replace" })
     } catch (error) {
       console.error("Worktree create request threw", error)
+      window.alert(error?.message || "Failed to create worktree")
+    }
+  }
+
+  openReplaceCreateDialog(parentId, branchName) {
+    this.pendingReplaceCreatePayload = { parentId, branchName }
+    this.replaceBranchTarget.textContent = branchName
+    this.createModalTarget.classList.add("hidden")
+    this.replaceModalTarget.classList.remove("hidden")
+  }
+
+  cancelReplaceCreate(event) {
+    event?.preventDefault?.()
+    this.replaceModalTarget.classList.add("hidden")
+    this.pendingReplaceCreatePayload = null
+    this.createModalTarget.classList.remove("hidden")
+    this.createInputTarget.focus()
+    this.createInputTarget.select()
+  }
+
+  async submitReplaceCreate(event) {
+    event.preventDefault()
+    this.traceAction("submit-replace-create")
+
+    const payload = this.pendingReplaceCreatePayload
+    if (!payload) return
+
+    try {
+      const result = await this.requestCreateWorktree({
+        parentId: payload.parentId,
+        branchName: payload.branchName,
+        replaceExisting: true,
+        forceReplace: true
+      })
+
+      if (!result.ok) {
+        window.alert(result.message)
+        return
+      }
+
+      if (!result.payload.redirect_url) {
+        window.alert("Worktree created but response was incomplete")
+        return
+      }
+
+      this.closeDialogs()
+      Turbo.visit(result.payload.redirect_url, { action: "replace" })
+    } catch (error) {
       window.alert(error?.message || "Failed to create worktree")
     }
   }
@@ -477,8 +513,10 @@ export default class extends Controller {
 
   closeDialogs() {
     this.createModalTarget.classList.add("hidden")
+    this.replaceModalTarget.classList.add("hidden")
     this.deleteModalTarget.classList.add("hidden")
     this.pendingCreateParentId = null
+    this.pendingReplaceCreatePayload = null
     this.pendingDeleteWorktreeId = null
   }
 
@@ -490,7 +528,39 @@ export default class extends Controller {
 
   isModalOpen() {
     return !this.createModalTarget.classList.contains("hidden") ||
+      !this.replaceModalTarget.classList.contains("hidden") ||
       !this.deleteModalTarget.classList.contains("hidden")
+  }
+
+  async requestCreateWorktree({ parentId, branchName, replaceExisting, forceReplace }) {
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    const response = await fetch(this.createUrlValue, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-CSRF-Token": csrfToken
+      },
+      body: JSON.stringify({
+        repo: this.repoValue,
+        parent_id: parentId,
+        name: branchName,
+        replace_existing: replaceExisting,
+        force_replace: forceReplace
+      })
+    })
+
+    const payload = await this.parseJsonResponse(response)
+    if (response.ok) {
+      return { ok: true, payload }
+    }
+
+    const message = payload.error || payload.raw || `Failed to create worktree (${response.status})`
+    const conflict = /already exists/i.test(message)
+    return { ok: false, payload, message, conflict }
   }
 
   isTerminalSessionActive(event) {

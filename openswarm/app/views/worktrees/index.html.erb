@@ -355,16 +355,34 @@
              class="w-full rounded-md border border-gray-300 px-2.5 py-2 text-[12px] font-mono text-gray-800 focus:outline-none focus:border-blue-400"
              data-graph-keyboard-target="createInput"
              placeholder="feature/my-change" />
-      <label class="mt-3 flex items-center gap-2 text-[11px] text-gray-700 font-mono">
-        <input type="checkbox" class="rounded border-gray-300" data-graph-keyboard-target="createReplace" />
-        replace existing worktree/branch with same name
-      </label>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
                 class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
                 data-action="click->graph-keyboard#cancelCreate">cancel</button>
         <button type="submit"
                 class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100">create</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="hidden fixed inset-0 z-[56] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="replaceModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-md rounded-xl border border-amber-300 bg-white shadow-xl p-4"
+          data-action="submit->graph-keyboard#submitReplaceCreate click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">worktree already exists</h3>
+      <p class="text-[11px] text-gray-500 font-mono mb-3">
+        branch: <span class="text-gray-700" data-graph-keyboard-target="replaceBranch"></span>
+      </p>
+      <p class="text-[11px] text-gray-500 font-mono mb-4">
+        delete the existing worktree/branch and create a new one?
+      </p>
+      <div class="flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                data-action="click->graph-keyboard#cancelReplaceCreate">no</button>
+        <button type="submit"
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">delete and create</button>
       </div>
     </form>
   </div>
