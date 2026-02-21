@@ -127,43 +127,130 @@ class WorktreesController < ApplicationController
   end
 
   # Compute x,y positions and SVG edges for a tree of worktrees.
-  # Uses a layered top-down layout with centered siblings.
+  # Uses a parent-aware layered layout so children stay under their parent.
   def compute_layout(tree, worktrees)
     return { nodes: [], edges: [], width: 1000, height: 400 } if tree.empty? || worktrees.empty?
 
     worktree_by_id = worktrees.index_by(&:id)
-    levels = Hash.new { |h, k| h[k] = [] }
-    edge_pairs = []
+    children_by_id = Hash.new { |h, k| h[k] = [] }
+    parent_by_id = {}
     visited = {}
 
     walk = nil
-    walk = lambda do |node, depth|
+    walk = lambda do |node, parent_id = nil|
       return unless node.is_a?(Hash)
 
       node_id = node[:id]
       return if node_id.nil? || visited[node_id]
 
       visited[node_id] = true
-      levels[depth] << node_id
+      parent_by_id[node_id] = parent_id if parent_id
 
-      (node[:children] || []).each do |child|
+      raw_children = Array(node[:children]).select { |child| child.is_a?(Hash) && child[:id] }
+      raw_children.each do |child|
         child_id = child[:id]
-        edge_pairs << [node_id, child_id] if child_id
-        walk.call(child, depth + 1)
+        children_by_id[node_id] << child_id
+        walk.call(child, node_id)
       end
     end
 
-    walk.call(tree, 0)
+    walk.call(tree) if tree.is_a?(Hash)
 
-    missing_ids = worktree_by_id.keys - visited.keys
-    missing_ids.each do |id|
-      levels[1] << id
-      edge_pairs << [tree[:id], id]
+    root_id = if tree.is_a?(Hash)
+      tree[:id]
+    end
+    unless root_id && worktree_by_id.key?(root_id)
+      root_id = worktrees.find { |wt| wt.parent_branch.nil? }&.id || worktrees.first&.id
     end
 
-    all_levels = levels.keys.sort.map { |depth| levels[depth].uniq }
+    branch_to_id = {}
+    worktrees.each do |wt|
+      next if wt.detached || wt.branch == "(detached)"
 
-    nodes = []
+      branch_to_id[wt.branch] ||= wt.id
+    end
+
+    worktrees.each do |wt|
+      next if wt.id == root_id
+      next if wt.detached
+      next if parent_by_id.key?(wt.id)
+
+      parent_id = wt.parent_branch && branch_to_id[wt.parent_branch]
+      parent_id = root_id if parent_id.nil? || parent_id == wt.id
+      next unless parent_id
+
+      parent_by_id[wt.id] = parent_id
+      children_by_id[parent_id] << wt.id
+    end
+
+    worktree_by_id.keys.each do |id|
+      next if id == root_id
+      next if parent_by_id.key?(id)
+      next unless root_id
+
+      parent_by_id[id] = root_id
+      children_by_id[root_id] << id
+    end
+
+    children_by_id.each_value(&:uniq!)
+
+    depth_by_id = {}
+    if root_id
+      depth_by_id[root_id] = 0
+      queue = [root_id]
+      until queue.empty?
+        current_id = queue.shift
+        children_by_id[current_id].each do |child_id|
+          next if depth_by_id.key?(child_id)
+
+          depth_by_id[child_id] = depth_by_id[current_id] + 1
+          queue << child_id
+        end
+      end
+    end
+
+    worktree_by_id.keys.each do |id|
+      depth_by_id[id] ||= (id == root_id ? 0 : 1)
+    end
+
+    x_units = {}
+    placing = {}
+    cursor = 0.0
+
+    assign_x = nil
+    assign_x = lambda do |id|
+      return x_units[id] if x_units.key?(id)
+      return cursor if placing[id]
+
+      placing[id] = true
+      child_ids = children_by_id[id]
+        .select { |child_id| worktree_by_id.key?(child_id) }
+        .sort_by { |child_id| worktree_by_id[child_id]&.branch.to_s }
+
+      if child_ids.empty?
+        x_units[id] = cursor
+        cursor += 1.0
+      else
+        child_ids.each { |child_id| assign_x.call(child_id) }
+        first_child = child_ids.first
+        last_child = child_ids.last
+        x_units[id] = (x_units[first_child] + x_units[last_child]) * 0.5
+      end
+
+      placing.delete(id)
+      x_units[id]
+    end
+
+    roots = [root_id].compact
+    worktree_by_id.each_key do |id|
+      roots << id if parent_by_id[id].nil? && id != root_id
+    end
+    roots.uniq.each_with_index do |id, idx|
+      assign_x.call(id)
+      cursor += 0.8 if idx < roots.length - 1
+    end
+
+    worktree_by_id.each_key { |id| assign_x.call(id) unless x_units.key?(id) }
 
     # Layout params — generous spacing for premium look
     node_width = 200
@@ -173,36 +260,34 @@ class WorktreesController < ApplicationController
     canvas_padding_x = 80
     canvas_padding_y = 60
 
-    # Calculate positions
-    max_count = [all_levels.map(&:length).max || 1, 1].max
-    canvas_width = [max_count * (node_width + horizontal_gap) - horizontal_gap + canvas_padding_x * 2, 900].max
-    canvas_height = all_levels.length * level_gap + node_height + canvas_padding_y * 2
+    unit_values = x_units.values
+    min_unit = unit_values.min || 0.0
+    max_unit = unit_values.max || 0.0
+    unit_span = (max_unit - min_unit).abs
+    unit_step = node_width + horizontal_gap
+    canvas_width = [((unit_span + 1.0) * unit_step + canvas_padding_x * 2).round, 900].max
+    max_depth = depth_by_id.values.max || 0
+    canvas_height = (max_depth + 1) * level_gap + node_height + canvas_padding_y * 2
 
-    all_levels.each_with_index do |level_ids, level_idx|
-      level_nodes = level_ids.filter_map { |id| worktree_by_id[id] }
-      next if level_nodes.empty?
+    nodes = worktree_by_id.values.map do |wt|
+      x = canvas_padding_x + (x_units[wt.id] - min_unit) * unit_step
+      y = canvas_padding_y + depth_by_id[wt.id] * level_gap
 
-      total_width = level_nodes.length * node_width + (level_nodes.length - 1) * horizontal_gap
-      start_x = (canvas_width - total_width) / 2.0
-
-      level_nodes.each_with_index do |wt, node_idx|
-        x = start_x + node_idx * (node_width + horizontal_gap)
-        y = canvas_padding_y + level_idx * level_gap
-
-        nodes << {
-          id: wt.id,
-          x: x.round(1),
-          y: y.round(1),
-          width: node_width,
-          height: node_height,
-          center_x: (x + node_width / 2.0).round(1),
-          center_y: (y + node_height / 2.0).round(1),
-          worktree: wt
-        }
-      end
-    end
+      {
+        id: wt.id,
+        x: x.round(1),
+        y: y.round(1),
+        width: node_width,
+        height: node_height,
+        center_x: (x + node_width / 2.0).round(1),
+        center_y: (y + node_height / 2.0).round(1),
+        worktree: wt
+      }
+    end.sort_by { |node| [node[:y], node[:x]] }
 
     node_by_id = nodes.index_by { |n| n[:id] }
+    edge_pairs = parent_by_id.map { |child_id, parent_id| [parent_id, child_id] }.uniq
+
     edges = edge_pairs.filter_map do |from_id, to_id|
       from_node = node_by_id[from_id]
       to_node = node_by_id[to_id]
