@@ -82,7 +82,7 @@
         <% @layout[:nodes].each do |node_data| %>
           <% wt = node_data[:worktree] %>
           <% is_selected = wt.id == @selected_id %>
-          <div class="absolute group pb-12"
+          <div class="absolute group"
                style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;">
             <button type="button"
                     class="w-full cursor-pointer transition-all duration-200 ease-out focus:outline-none"
@@ -130,13 +130,10 @@
             </button>
 
             <button type="button"
-                    class="node-create-btn absolute left-1/2 top-full mt-2.5 w-8 h-8 rounded-full
+                    class="node-create-btn absolute left-1/2 top-full w-8 h-8 rounded-full
                            border border-blue-300 bg-white/95 text-blue-600 text-[18px] leading-none
                            flex items-center justify-center shadow-lg shadow-blue-200/50
-                           -translate-x-1/2 -translate-y-1 scale-95 opacity-0 pointer-events-none
-                           transition-all duration-200 ease-out
-                           group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto
-                           group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+                           transition-all duration-200 ease-out"
                     title="Create child worktree"
                     data-action="click->graph-keyboard#createFromNode"
                     data-parent-id="<%= wt.id %>"
