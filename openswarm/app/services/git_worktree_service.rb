@@ -80,6 +80,8 @@ class GitWorktreeService
         return Result.new(success: false, error: error)
       end
 
+      save_parent_hint(main_root, branch, parent_branch)
+
       Result.new(success: true, data: {
         id: worktree_id_for(worktree_path, branch),
         branch: branch,
@@ -203,63 +205,133 @@ class GitWorktreeService
     def assign_parent_branches!(worktrees, main_root)
       root = worktrees.find { |wt| wt.path == main_root }
       root_branch = root&.branch || "main"
+      hints = load_parent_hint_map(main_root)
+
+      branch_to_worktree = worktrees.each_with_object({}) do |wt, acc|
+        next if wt.detached || wt.branch.empty? || wt.branch == "(detached)"
+
+        acc[wt.branch] ||= wt
+      end
 
       worktrees.each do |wt|
+        wt.parent_branch = nil
         next if wt == root
-        next if wt.detached
+        next if wt.detached || wt.branch.empty? || wt.branch == "(detached)"
 
-        inferred = infer_parent_branch(main_root, wt, worktrees)
-        wt.parent_branch = inferred || root_branch
-      end
-    end
-
-    def infer_parent_branch(main_root, worktree, worktrees)
-      reflog_parent = parent_from_reflog(main_root, worktree.branch)
-      return reflog_parent if reflog_parent
-
-      infer_parent_from_merge_base(worktree, worktrees)
-    end
-
-    def parent_from_reflog(main_root, branch)
-      reflog = git(main_root, "reflog", "show", "--format=%gs", "--reverse", "refs/heads/#{branch}")
-      return nil unless reflog
-
-      creation_line = reflog.lines.map(&:strip).find { |line| line.include?("Created from") }
-      return nil unless creation_line
-
-      match = creation_line.match(/Created from\s+(.+)\z/)
-      return nil unless match
-
-      candidate = match[1].to_s.strip
-      return nil if candidate.empty?
-      return nil if candidate == "HEAD"
-      return nil if candidate.start_with?("HEAD@{")
-
-      candidate.sub(%r{\Arefs/heads/}, "")
-    end
-
-    def infer_parent_from_merge_base(worktree, worktrees)
-      candidates = worktrees.reject do |candidate|
-        candidate.branch == worktree.branch || candidate.detached || candidate.branch == "(detached)"
-      end
-
-      best = nil
-
-      candidates.each do |candidate|
-        rev_list = git(worktree.path, "rev-list", "--left-right", "--count", "#{worktree.branch}...#{candidate.branch}")
-        next unless rev_list
-
-        ahead, behind = rev_list.strip.split(/\s+/).map(&:to_i)
-        next unless ahead
-        next unless behind
-
-        score = [behind, -ahead]
-        if best.nil? || (score <=> best[:score]) == -1
-          best = { branch: candidate.branch, score: score }
+        hinted_parent = hints[wt.branch]
+        parent_branch = if hinted_parent && hinted_parent != wt.branch && branch_to_worktree.key?(hinted_parent)
+          hinted_parent
+        else
+          find_branch_parent_branch(wt.branch, branch_to_worktree)
         end
+
+        parent_branch ||= root_branch
+        parent_branch = root_branch if parent_branch == wt.branch
+        wt.parent_branch = parent_branch
       end
 
-      best&.dig(:branch)
+      repair_parent_cycles!(worktrees, root_branch)
+    end
+
+    def find_branch_parent_branch(branch, branch_to_worktree)
+      parts = branch.to_s.split("/")
+      while parts.length > 1
+        parts.pop
+        candidate = parts.join("/")
+        return candidate if branch_to_worktree.key?(candidate)
+      end
+
+      nil
+    end
+
+    def workspaces_container_for_root(main_root)
+      File.join(File.dirname(main_root), ".#{File.basename(main_root)}-workspaces")
+    end
+
+    def parent_hint_map_path(main_root)
+      File.join(workspaces_container_for_root(main_root), ".parent-hints")
+    end
+
+    def load_parent_hint_map(main_root)
+      path = parent_hint_map_path(main_root)
+      return {} unless File.file?(path)
+
+      map = {}
+      File.readlines(path, chomp: true).each do |line|
+        row = line.strip
+        next if row.empty? || row.start_with?("#")
+
+        child, parent = row.split("\t", 2)
+        next if child.to_s.strip.empty? || parent.to_s.strip.empty?
+
+        map[child.strip] = parent.strip
+      end
+
+      map
+    rescue
+      {}
+    end
+
+    def save_parent_hint(main_root, child_branch, parent_branch)
+      return if child_branch.to_s.strip.empty? || parent_branch.to_s.strip.empty?
+
+      require "fileutils"
+      path = parent_hint_map_path(main_root)
+      FileUtils.mkdir_p(File.dirname(path))
+
+      map = load_parent_hint_map(main_root)
+      map[child_branch.to_s.strip] = parent_branch.to_s.strip
+
+      content = map.sort_by { |child, _| child }
+        .map { |child, parent| "#{child}\t#{parent}" }
+        .join("\n")
+      content = "#{content}\n" unless content.empty?
+      File.write(path, content)
+    rescue
+      nil
+    end
+
+    def repair_parent_cycles!(worktrees, root_branch)
+      by_branch = worktrees.each_with_object({}) do |wt, acc|
+        next if wt.detached || wt.branch.empty? || wt.branch == "(detached)"
+
+        acc[wt.branch] ||= wt
+      end
+
+      branch_to_parent = worktrees.each_with_object({}) do |wt, acc|
+        next if wt.detached || wt.branch.empty? || wt.branch == "(detached)"
+        next if wt.parent_branch.to_s.empty?
+
+        acc[wt.branch] = wt.parent_branch
+      end
+
+      loop do
+        changed = false
+
+        branch_to_parent.keys.each do |start_branch|
+          seen = {}
+          current = start_branch
+
+          loop do
+            parent = branch_to_parent[current]
+            break if parent.to_s.empty?
+
+            if parent == current || seen[parent]
+              branch_to_parent[current] = root_branch
+              if (wt = by_branch[current])
+                wt.parent_branch = root_branch
+              end
+              changed = true
+              break
+            end
+
+            seen[current] = true
+            current = parent
+          end
+        end
+
+        break unless changed
+      end
     end
 
     # Enrich worktrees with dirty status, ahead/behind counts
