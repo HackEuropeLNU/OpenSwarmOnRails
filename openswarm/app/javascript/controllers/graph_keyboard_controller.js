@@ -731,13 +731,14 @@ export default class extends Controller {
       })
     })
 
-    rows.sort((left, right) => right.tps - left.tps)
-    const maxRate = rows.reduce((max, row) => Math.max(max, row.tps), 0)
-    const idleWtCount = rows.filter((row) => row.tps === 0).length
-    const activeWtCount = rows.length - idleWtCount
+    const activeRows = rows.filter((row) => row.tps > 0)
+    activeRows.sort((left, right) => right.tps - left.tps)
+    const maxRate = activeRows.reduce((max, row) => Math.max(max, row.tps), 0)
+    const idleWtCount = rows.length - activeRows.length
+    const activeWtCount = activeRows.length
 
     this.tokenLegendRowsTarget.innerHTML = ""
-    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", rows.length > 0 || this.tokenLegendCollapsed)
+    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", activeRows.length > 0 || this.tokenLegendCollapsed)
 
     if (this.hasTokenLegendSummaryTarget) {
       this.tokenLegendSummaryTarget.textContent = `idle_wt_count: ${idleWtCount} | active_wt_count: ${activeWtCount} | max_tps: ${maxRate.toFixed(1)}`
@@ -751,7 +752,7 @@ export default class extends Controller {
       this.tokenLegendToggleLabelTarget.textContent = this.tokenLegendCollapsed ? "expand" : "collapse"
     }
 
-    rows.forEach((row) => {
+    activeRows.forEach((row) => {
       const ratio = maxRate > 0 ? row.tps / maxRate : 0
       const rowElement = document.createElement("div")
       rowElement.className = "grid grid-cols-[minmax(0,1fr)_70px_34px] items-center gap-2"
