@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+
+  --color-surface-0: #0a0e1a;
+  --color-surface-1: #0f1424;
+  --color-surface-2: #151b2e;
+  --color-surface-3: #1a2138;
+
+  --color-border-subtle: rgba(71, 85, 105, 0.3);
+  --color-border-default: rgba(71, 85, 105, 0.5);
+  --color-border-strong: rgba(100, 116, 139, 0.6);
+
+  --color-accent-blue: #3b82f6;
+  --color-accent-glow: rgba(59, 130, 246, 0.15);
+}
+
+/* ═══ Base ═══ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.6);
+}
+
+/* ═══ Subtle glow effects for the premium feel ═══ */
+.node-glow {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1),
+              0 4px 12px -2px rgba(0, 0, 0, 0.3),
+              0 0 20px -4px rgba(59, 130, 246, 0.08);
+}
+
+.node-glow-selected {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3),
+              0 4px 16px -2px rgba(59, 130, 246, 0.15),
+              0 0 30px -4px rgba(59, 130, 246, 0.12);
+}
+
+.node-glow-dirty {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2),
+              0 4px 12px -2px rgba(0, 0, 0, 0.3),
+              0 0 20px -4px rgba(239, 68, 68, 0.1);
+}
+
+/* ═══ Animated pulse for dirty indicator ═══ */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 2s ease-in-out infinite;
+}
+
+/* ═══ Grid background ═══ */
+.bg-grid {
+  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ═══ Kbd styling ═══ */
+kbd {
+  font-family: var(--font-mono);
+}
+
+/* ═══ Focus styles ═══ */
+:focus-visible {
+  outline: 1px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  outline: 1px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}

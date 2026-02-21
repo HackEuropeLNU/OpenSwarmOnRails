@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenSwarm on Rails - Graph UI Scaffold</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: ['"JetBrains Mono"', "monospace"],
+              display: ["Sora", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div
+      id="app"
+      class="relative min-h-screen overflow-hidden font-mono transition-colors duration-300"
+      :class="theme === 'dark' ? 'text-[#e2e7ff]' : 'text-[#1a2432]'"
+      :style="backgroundStyle"
+    >
+      <div v-if="bgMode === 'stars'" class="pointer-events-none absolute inset-0">
+        <span
+          v-for="star in stars"
+          :key="star.id"
+          class="absolute rounded-full bg-white"
+          :class="star.size === 1 ? 'h-[2px] w-[2px]' : 'h-[3px] w-[3px]'"
+          :style="{ left: star.x + '%', top: star.y + '%', opacity: star.opacity }"
+        ></span>
+      </div>
+
+      <main class="grid min-h-screen grid-cols-1 lg:grid-cols-[minmax(580px,1fr)_360px]">
+        <section class="p-3">
+          <header class="mb-2 flex flex-col gap-2 font-display text-sm sm:flex-row sm:items-center sm:justify-between sm:text-base">
+            <p>
+              worktree graph
+              <span class="opacity-90">bg:{{ bgMode }}</span>
+            </p>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                @click="connectProject"
+                :disabled="isConnectingProject"
+                class="rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-60"
+                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
+              >
+                {{ isConnectingProject ? "connecting..." : "connect project" }}
+              </button>
+              <button
+                type="button"
+                @click="toggleTheme"
+                class="rounded border px-2 py-1"
+                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
+              >
+                theme
+              </button>
+              <button
+                type="button"
+                @click="cycleBackground"
+                class="rounded border px-2 py-1"
+                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
+              >
+                ctrl+b bg
+              </button>
+            </div>
+          </header>
+
+          <p
+            v-if="connectedProject"
+            class="mb-2 text-xs sm:text-sm"
+            :class="theme === 'dark' ? 'text-[#9ed8ad]' : 'text-[#2f6a3f]'"
+          >
+            Connected: <strong>{{ connectedProject.name }}</strong> (<strong>{{ connectedProject.worktreeCount }}</strong> worktrees)
+          </p>
+
+          <p
+            v-if="connectError"
+            class="mb-2 text-xs sm:text-sm"
+            :class="theme === 'dark' ? 'text-[#f6a0a0]' : 'text-[#8b2f2f]'"
+          >
+            {{ connectError }}
+          </p>
+
+          <div
+            class="relative min-h-[640px] overflow-auto border-2"
+            tabindex="0"
+            @keydown="onCanvasKeydown"
+            :class="theme === 'dark' ? 'border-[#3d7ff6] bg-[#161d33]/40' : 'border-[#9aa3b3] bg-white/60'"
+          >
+            <svg v-if="hasNodes" viewBox="0 0 1000 660" class="block h-[660px] w-full" aria-hidden="true">
+              <path
+                v-for="(link, index) in links"
+                :key="index"
+                :d="link"
+                fill="none"
+                stroke-width="2"
+                :stroke="theme === 'dark' ? '#4f8ef9' : '#8ab2ff'"
+              ></path>
+            </svg>
+
+            <p
+              v-else
+              class="absolute left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-6 text-center text-sm"
+              :class="theme === 'dark' ? 'text-[#aeb7cf]' : 'text-[#5f6f84]'"
+            >
+              No graph data loaded. Set <code>window.OPENSWARM_GRAPH_DATA</code> before app init to render live worktrees.
+            </p>
+
+            <button
+              v-for="node in nodes"
+              :key="node.id"
+              :class="nodeClass(node)"
+              :style="nodeStyle(node)"
+              type="button"
+              @click="setSelected(node.id)"
+            >
+              <strong>{{ node.branch }}</strong>
+              <small>{{ node.state }}</small>
+            </button>
+          </div>
+        </section>
+
+        <aside
+          class="flex flex-col gap-2 border-t p-3 lg:border-l lg:border-t-0"
+          :class="theme === 'dark' ? 'border-[#4f5470] bg-[#1a1d2f]/80' : 'border-[#c8d0db] bg-[#eceef2]'"
+        >
+          <section class="border p-2" :class="cardClass">
+            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">project</h3>
+            <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+              <span>name:</span> <strong>{{ connectedProject.name }}</strong>
+            </p>
+            <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+              <span>git:</span> <strong>{{ connectedProject.gitDirectoryName }}</strong>
+            </p>
+            <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+              <span>worktrees:</span> <strong>{{ connectedProject.worktreeCount }}</strong>
+            </p>
+            <p v-if="!connectedProject" class="mb-1 text-xs sm:text-sm">
+              Connect a repository root folder that contains <code>.git</code>.
+            </p>
+          </section>
+
+          <section class="border p-2" :class="cardClass">
+            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">workspace stats</h3>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>total:</span> <strong>{{ nodeStats.total }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>dirty:</span> <strong>{{ nodeStats.dirty }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>ahead:</span> <strong>{{ nodeStats.ahead }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>behind:</span> <strong>{{ nodeStats.behind }}</strong></p>
+          </section>
+
+          <section v-if="selectedNode" class="border p-2" :class="cardClass">
+            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">details</h3>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>branch:</span> <strong>{{ selectedNode.branch }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>path:</span> <strong>{{ selectedNode.path }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>dirty:</span> <strong>{{ selectedNode.dirty ? "yes" : "no" }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+              <span>ahead:</span> <strong>{{ selectedNode.ahead }}</strong>
+              <span>behind:</span> <strong>{{ selectedNode.behind }}</strong>
+            </p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>parent:</span> <strong>{{ selectedNode.parentId || "none" }}</strong></p>
+            <p class="mt-2 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>status:</span> <strong>{{ selectedNode.state }}</strong></p>
+          </section>
+
+          <section class="border p-2" :class="cardClass">
+            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">actions</h3>
+            <ul class="space-y-1 text-xs sm:text-sm">
+              <li v-for="action in actions" :key="action.key + action.label"><b>{{ action.key }}</b> {{ action.label }}</li>
+            </ul>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

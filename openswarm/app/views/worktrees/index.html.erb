@@ -1,0 +1,314 @@
+<% content_for(:title) { "OpenSwarm — Worktree Graph" } %>
+
+<div class="w-full h-screen flex flex-col overflow-hidden"
+     data-controller="graph-keyboard theme"
+     data-theme-target="root"
+     data-graph-keyboard-selected-value="<%= @selected_id %>">
+
+  <%# ═══ Top Bar ═══ %>
+  <header class="flex items-center justify-between px-5 py-2.5 border-b border-slate-800/60 bg-[#0c1120]/90 backdrop-blur-md shrink-0 z-10">
+    <div class="flex items-center gap-5">
+      <div class="flex items-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-blue-500 animate-soft-pulse"></div>
+        <h1 class="text-[13px] font-semibold tracking-wide text-slate-200">
+          <span class="text-blue-400">open</span><span class="text-slate-300">swarm</span>
+        </h1>
+      </div>
+
+      <div class="h-4 w-px bg-slate-700/50"></div>
+
+      <%# Repo Selector %>
+      <div class="flex items-center gap-1.5">
+        <% @repos.each do |repo| %>
+          <a href="<%= worktrees_path(repo: repo[:name]) %>"
+             class="text-[11px] font-mono px-2.5 py-1 rounded-md transition-all duration-150
+                    <%= repo[:name] == @selected_repo&.dig(:name) ?
+                      'bg-blue-500/15 text-blue-300 border border-blue-500/25' :
+                      'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 border border-transparent' %>">
+            <%= repo[:name] %>
+            <span class="text-slate-600 ml-0.5">(<%= repo[:worktree_count] %>)</span>
+          </a>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] text-slate-600 font-mono mr-2">
+        <%= @worktrees.length %> worktree<%= @worktrees.length == 1 ? '' : 's' %>
+      </span>
+      <button type="button"
+              class="text-[11px] font-mono px-2.5 py-1 rounded-md border border-slate-800/60 text-slate-500 hover:text-slate-300 hover:border-slate-600 hover:bg-slate-800/40 transition-all duration-150"
+              title="Refresh worktrees (r)"
+              data-action="click->graph-keyboard#refresh">
+        refresh
+      </button>
+    </div>
+  </header>
+
+  <%# ═══ Main Content ═══ %>
+  <div class="flex-1 flex min-h-0">
+
+    <%# ═══ Graph Canvas ═══ %>
+    <main class="flex-1 relative overflow-auto" id="graph-canvas"
+          data-graph-keyboard-target="canvas">
+
+      <%# Subtle grid background %>
+      <div class="absolute inset-0 bg-grid pointer-events-none"></div>
+
+      <%# Radial glow behind graph %>
+      <div class="absolute inset-0 pointer-events-none"
+           style="background: radial-gradient(ellipse 60% 40% at 50% 40%, rgba(59,130,246,0.04) 0%, transparent 70%);">
+      </div>
+
+      <div class="relative p-6" style="min-width: <%= @layout[:width] %>px; min-height: <%= @layout[:height] %>px;">
+        <%# SVG Edges %>
+        <svg class="absolute inset-0 pointer-events-none" preserveAspectRatio="none"
+             viewBox="0 0 <%= @layout[:width] %> <%= @layout[:height] %>"
+             style="width: <%= @layout[:width] %>px; height: <%= @layout[:height] %>px;">
+          <defs>
+            <linearGradient id="edge-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.5" />
+              <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.15" />
+            </linearGradient>
+            <filter id="edge-glow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <% @layout[:edges].each do |edge| %>
+            <%# Glow layer %>
+            <path d="<%= edge[:path] %>" fill="none" stroke="rgba(59,130,246,0.12)" stroke-width="6"
+                  stroke-linecap="round" />
+            <%# Main edge %>
+            <path d="<%= edge[:path] %>" fill="none" stroke="url(#edge-grad)" stroke-width="1.5"
+                  stroke-linecap="round" />
+          <% end %>
+        </svg>
+
+        <%# Worktree Nodes %>
+        <% @layout[:nodes].each do |node_data| %>
+          <% wt = node_data[:worktree] %>
+          <% is_selected = wt.id == @selected_id %>
+          <button type="button"
+                  class="absolute group cursor-pointer transition-all duration-200 ease-out focus:outline-none"
+                  style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;"
+                  data-action="click->graph-keyboard#selectNode"
+                  data-node-id="<%= wt.id %>"
+                  data-graph-keyboard-target="node">
+            <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
+                        bg-[#111827]/90 backdrop-blur-sm
+                        hover:-translate-y-0.5 hover:shadow-lg
+                        <%= is_selected ? 'node-glow-selected border-blue-500/40 ring-1 ring-blue-400/20' :
+                            wt.dirty ? 'node-glow-dirty border-red-500/30' :
+                            wt.parent_branch.nil? ? 'node-glow border-amber-500/20' :
+                            'node-glow border-slate-700/50 hover:border-slate-600/60' %>">
+
+              <%# Branch name + indicators %>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[12px] font-medium text-slate-100 truncate font-mono tracking-tight">
+                  <%= wt.branch %>
+                </span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <% if wt.dirty %>
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-400 animate-soft-pulse"></span>
+                  <% end %>
+                  <% if wt.parent_branch.nil? %>
+                    <span class="text-[9px] text-amber-400/60 font-mono">root</span>
+                  <% end %>
+                </div>
+              </div>
+
+              <%# Status row %>
+              <div class="flex items-center gap-2">
+                <span class="text-[10px] px-1.5 py-0.5 rounded-md border font-mono leading-none
+                             <%= node_state_badge_class(wt.state) %>">
+                  <%= wt.state %>
+                </span>
+                <% if wt.ahead > 0 %>
+                  <span class="text-[10px] text-emerald-400/60 font-mono">+<%= wt.ahead %></span>
+                <% end %>
+                <% if wt.behind > 0 %>
+                  <span class="text-[10px] text-amber-400/60 font-mono">-<%= wt.behind %></span>
+                <% end %>
+              </div>
+            </div>
+          </button>
+        <% end %>
+
+        <% if @worktrees.empty? %>
+          <div class="flex items-center justify-center h-80">
+            <div class="text-center">
+              <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center">
+                <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </div>
+              <p class="text-slate-500 text-sm font-mono mb-1">no worktrees found</p>
+              <p class="text-slate-600 text-[11px] font-mono">
+                press <kbd class="px-1.5 py-0.5 bg-slate-800/80 rounded border border-slate-700/40 text-slate-400 text-[10px]">a</kbd> to create one
+              </p>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </main>
+
+    <%# ═══ Right Sidebar ═══ %>
+    <aside class="w-[320px] shrink-0 border-l border-slate-800/50 bg-[#0c1120]/80 backdrop-blur-sm flex flex-col overflow-y-auto">
+
+      <%# ─── Status Overview ─── %>
+      <div class="p-4 border-b border-slate-800/40">
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-slate-600 mb-3 font-mono">overview</h3>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="text-center py-2.5 px-2 rounded-lg bg-slate-800/30 border border-slate-800/40">
+            <div class="text-base font-semibold text-slate-200 font-mono leading-none mb-1"><%= @worktrees.length %></div>
+            <div class="text-[9px] text-slate-600 font-mono uppercase tracking-wider">total</div>
+          </div>
+          <div class="text-center py-2.5 px-2 rounded-lg bg-slate-800/30 border border-slate-800/40">
+            <div class="text-base font-semibold text-emerald-400/80 font-mono leading-none mb-1"><%= @worktrees.count { |wt| !wt.dirty } %></div>
+            <div class="text-[9px] text-slate-600 font-mono uppercase tracking-wider">clean</div>
+          </div>
+          <div class="text-center py-2.5 px-2 rounded-lg bg-slate-800/30 border border-slate-800/40">
+            <div class="text-base font-semibold text-red-400/80 font-mono leading-none mb-1"><%= @worktrees.count(&:dirty) %></div>
+            <div class="text-[9px] text-slate-600 font-mono uppercase tracking-wider">dirty</div>
+          </div>
+        </div>
+      </div>
+
+      <%# ─── Selected Worktree Details ─── %>
+      <div class="p-4 border-b border-slate-800/40" data-graph-keyboard-target="details">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-[10px] uppercase tracking-[0.15em] text-slate-600 font-mono">details</h3>
+          <% if @selected_node %>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-md border font-mono
+                         <%= node_state_badge_class(@selected_node.state) %>">
+              <%= @selected_node.state %>
+            </span>
+          <% end %>
+        </div>
+
+        <% if @selected_node %>
+          <dl class="space-y-2.5">
+            <div class="flex items-start gap-3">
+              <dt class="text-[11px] text-slate-600 w-12 shrink-0 font-mono">branch</dt>
+              <dd class="text-[12px] text-slate-200 font-medium font-mono"><%= @selected_node.branch %></dd>
+            </div>
+            <div class="flex items-start gap-3">
+              <dt class="text-[11px] text-slate-600 w-12 shrink-0 font-mono">path</dt>
+              <dd class="text-[11px] text-slate-400 break-all font-mono leading-relaxed"><%= format_path(@selected_node.path) %></dd>
+            </div>
+            <div class="flex items-start gap-3">
+              <dt class="text-[11px] text-slate-600 w-12 shrink-0 font-mono">HEAD</dt>
+              <dd class="text-[11px] text-slate-500 font-mono"><%= short_hash(@selected_node.head) %></dd>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] text-slate-600 font-mono">dirty</span>
+                <% if @selected_node.dirty %>
+                  <span class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                    <span class="text-[11px] text-red-400 font-mono">yes</span>
+                  </span>
+                <% else %>
+                  <span class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400/60"></span>
+                    <span class="text-[11px] text-emerald-400/80 font-mono">no</span>
+                  </span>
+                <% end %>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[11px] font-mono">
+                  <span class="text-slate-600">ahead</span>
+                  <span class="text-emerald-400/70 ml-1"><%= @selected_node.ahead %></span>
+                </span>
+                <span class="text-[11px] font-mono">
+                  <span class="text-slate-600">behind</span>
+                  <span class="text-amber-400/70 ml-1"><%= @selected_node.behind %></span>
+                </span>
+              </div>
+            </div>
+          </dl>
+        <% else %>
+          <p class="text-slate-700 text-[11px] font-mono italic">select a worktree node</p>
+        <% end %>
+      </div>
+
+      <%# ─── Worktree List ─── %>
+      <div class="p-4 border-b border-slate-800/40">
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-slate-600 mb-3 font-mono">worktrees</h3>
+        <div class="space-y-0.5">
+          <% @worktrees.each do |wt| %>
+            <a href="<%= worktrees_path(selected: wt.id, repo: @selected_repo&.dig(:name)) %>"
+               class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150
+                      <%= wt.id == @selected_id ?
+                        'bg-blue-500/8 border border-blue-500/15' :
+                        'hover:bg-slate-800/40 border border-transparent' %>"
+               data-turbo-action="replace">
+              <span class="w-1.5 h-1.5 rounded-full shrink-0
+                           <%= wt.dirty ? 'bg-red-400' : 'bg-emerald-400/50' %>"></span>
+              <span class="text-[11px] font-mono truncate
+                           <%= wt.id == @selected_id ? 'text-slate-200' : 'text-slate-400' %>">
+                <%= wt.branch %>
+              </span>
+              <span class="ml-auto flex items-center gap-1.5">
+                <% if wt.ahead > 0 %>
+                  <span class="text-[10px] text-emerald-400/50 font-mono">+<%= wt.ahead %></span>
+                <% end %>
+                <% if wt.behind > 0 %>
+                  <span class="text-[10px] text-amber-400/50 font-mono">-<%= wt.behind %></span>
+                <% end %>
+              </span>
+            </a>
+          <% end %>
+        </div>
+      </div>
+
+      <%# ─── Actions ─── %>
+      <div class="p-4 flex-1">
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-slate-600 mb-3 font-mono">actions</h3>
+        <div class="grid grid-cols-1 gap-0.5">
+          <% [
+            ["r", "refresh worktrees"],
+            ["a", "create worktree"],
+            ["o", "open terminal"],
+            ["f", "fetch + pull"],
+            ["R", "rebase onto parent"],
+            ["c", "add + commit"],
+            ["p", "push"],
+            ["d", "delete worktree"],
+            ["m", "merge to parent"],
+          ].each do |key, label| %>
+            <div class="flex items-center gap-2.5 py-1 group">
+              <kbd class="text-[10px] font-mono w-[18px] h-[18px] flex items-center justify-center rounded
+                          bg-slate-800/60 border border-slate-700/30 text-slate-500 shrink-0
+                          group-hover:text-slate-300 group-hover:border-slate-600/50 transition-colors"><%= key %></kbd>
+              <span class="text-[11px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors"><%= label %></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <%# ─── Footer ─── %>
+      <div class="p-3 border-t border-slate-800/40 mt-auto">
+        <div class="flex items-center justify-center gap-4 text-[10px] text-slate-700 font-mono">
+          <span><kbd class="text-slate-600">j</kbd>/<kbd class="text-slate-600">k</kbd> navigate</span>
+          <span class="text-slate-800">·</span>
+          <span><kbd class="text-slate-600">r</kbd> refresh</span>
+          <span class="text-slate-800">·</span>
+          <span><kbd class="text-slate-600">?</kbd> help</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <% if @error %>
+    <div class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-950/90 border border-red-800/50 rounded-xl px-5 py-3 text-[12px] text-red-300 font-mono backdrop-blur-md shadow-2xl shadow-red-900/20 z-50">
+      <span class="text-red-400 font-semibold mr-2">error</span><%= @error %>
+    </div>
+  <% end %>
+</div>
