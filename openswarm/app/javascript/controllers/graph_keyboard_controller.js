@@ -11,6 +11,7 @@ export default class extends Controller {
     "createModal",
     "createInput",
     "createParent",
+    "createReplace",
     "deleteModal",
     "deleteBranch",
     "deleteDirty",
@@ -187,6 +188,9 @@ export default class extends Controller {
     this.pendingCreateParentId = parentId
     this.createParentTarget.textContent = parentBranch || "this branch"
     this.createInputTarget.value = ""
+    if (this.hasCreateReplaceTarget) {
+      this.createReplaceTarget.checked = false
+    }
     this.createModalTarget.classList.remove("hidden")
     this.createInputTarget.focus()
   }
@@ -230,7 +234,9 @@ export default class extends Controller {
         body: JSON.stringify({
           repo: this.repoValue,
           parent_id: parentId,
-          name: trimmedName
+          name: trimmedName,
+          replace_existing: this.hasCreateReplaceTarget ? this.createReplaceTarget.checked : false,
+          force_replace: this.hasCreateReplaceTarget ? this.createReplaceTarget.checked : false
         })
       })
 

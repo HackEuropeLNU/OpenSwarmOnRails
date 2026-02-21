@@ -33,6 +33,8 @@ class WorktreesController < ApplicationController
     repo_name = params[:repo].to_s
     parent_id = params[:parent_id].to_s
     worktree_name = params[:name].to_s
+    replace_existing = ActiveModel::Type::Boolean.new.cast(params[:replace_existing])
+    force_replace = ActiveModel::Type::Boolean.new.cast(params[:force_replace])
 
     repos = discover_repos
     selected_repo = repos.find { |r| r[:name] == repo_name }
@@ -50,7 +52,9 @@ class WorktreesController < ApplicationController
     result = GitWorktreeService.create_worktree(
       repo_root: selected_repo[:root],
       parent_branch: parent.branch,
-      branch_name: worktree_name
+      branch_name: worktree_name,
+      replace_existing: replace_existing,
+      force_replace: force_replace
     )
 
     unless result.success
