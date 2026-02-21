@@ -15,6 +15,9 @@ const isDesktop = typeof desktopTerminal?.create === "function"
 
 // ── Flow control: batch ack every N chars ──
 const ACK_BATCH_SIZE = 5000
+const OPENCODE_SPINNER_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/
+const OPENCODE_IDLE_TIMEOUT_MS = 1500
+const SHELL_PROMPT_REGEX = /(?:\r?\n|^)[^\r\n]*[%$#] $/
 
 export default class extends Controller {
   static targets = [
@@ -44,6 +47,10 @@ export default class extends Controller {
     this.spinnerIntervalId = null
     this.activityTimeoutId = null
     this.isBackgroundBusy = false
+    this.trackingOpencode = false
+    this.inputBuffer = ""
+    this.outputTail = ""
+    this.textDecoder = new TextDecoder()
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -74,8 +81,8 @@ export default class extends Controller {
         if (this.unackedChars === 0) {
           debug("first terminal:data chunk", { sessionId, len: data.length, preview: data.slice(0, 80) })
         }
+        this.recordOutputActivity(data)
         this.term.write(data)
-        this.recordOutputActivity()
 
         // Flow control ACK
         this.unackedChars += data.length
@@ -91,7 +98,7 @@ export default class extends Controller {
         debug("received terminal:exit", { sessionId })
         this.statusTarget.textContent = "exited"
         this.sessionId = null
-        this.clearBackgroundActivity()
+        this.resetOpencodeTracking()
         this.updateBackgroundIndicator()
       })
 
@@ -229,6 +236,7 @@ export default class extends Controller {
       // Wire input: keystrokes -> IPC -> PTY
       this.term.onData((data) => {
         if (!this.sessionId) return
+        this.trackInputForOpencode(data)
         if (data && data.trim()) {
           debug("term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
         }
@@ -351,16 +359,20 @@ export default class extends Controller {
           if (!this.term) return
 
           if (message.type === "output") {
-            this.recordOutputActivity()
             if (message.encoding === "base64") {
-              this.term.write(this.decodeBase64(message.data || ""))
+              const bytes = this.decodeBase64(message.data || "")
+              const text = this.textDecoder.decode(bytes)
+              this.recordOutputActivity(text)
+              this.term.write(bytes)
             } else {
-              this.term.write(message.data || "")
+              const text = message.data || ""
+              this.recordOutputActivity(text)
+              this.term.write(text)
             }
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
             this.sessionId = null
-            this.clearBackgroundActivity()
+            this.resetOpencodeTracking()
             this.updateBackgroundIndicator()
           }
         }
@@ -370,6 +382,7 @@ export default class extends Controller {
     // Wire input for browser mode
     this.term.onData((data) => {
       if (!this.subscription) return
+      this.trackInputForOpencode(data)
       this.subscription.perform("input", { data })
     })
 
@@ -421,7 +434,7 @@ export default class extends Controller {
     if (!this.panelVisible) {
       document.documentElement.classList.remove("overflow-hidden")
     }
-    this.clearBackgroundActivity()
+    this.resetOpencodeTracking()
     this.updateBackgroundIndicator()
 
     if (this.term) {
@@ -458,7 +471,56 @@ export default class extends Controller {
     this.term.writeln(`\r\n${message}`)
   }
 
-  recordOutputActivity() {
+  trackInputForOpencode(data) {
+    if (!data) return
+
+    for (const char of data) {
+      if (char === "\u0003") {
+        this.resetOpencodeTracking()
+        continue
+      }
+
+      if (char === "\r" || char === "\n") {
+        const command = this.inputBuffer.trim()
+        if (command.startsWith("opencode")) {
+          this.trackingOpencode = true
+          this.outputTail = ""
+          this.clearBackgroundActivity()
+          this.updateBackgroundIndicator()
+        }
+        this.inputBuffer = ""
+        continue
+      }
+
+      if (char === "\u007f" || char === "\b") {
+        this.inputBuffer = this.inputBuffer.slice(0, -1)
+        continue
+      }
+
+      if (char >= " " && char <= "~") {
+        this.inputBuffer += char
+      }
+    }
+  }
+
+  recordOutputActivity(text) {
+    if (!this.trackingOpencode || !text) return
+
+    this.outputTail += text
+    if (this.outputTail.length > 2048) {
+      this.outputTail = this.outputTail.slice(-2048)
+    }
+
+    if (SHELL_PROMPT_REGEX.test(this.outputTail)) {
+      this.clearBackgroundActivity()
+      this.trackingOpencode = false
+      this.outputTail = ""
+      this.updateBackgroundIndicator()
+      return
+    }
+
+    if (!OPENCODE_SPINNER_REGEX.test(text)) return
+
     this.isBackgroundBusy = true
     this.startSpinner()
     this.updateBackgroundIndicator()
@@ -470,8 +532,10 @@ export default class extends Controller {
     this.activityTimeoutId = setTimeout(() => {
       this.isBackgroundBusy = false
       this.stopSpinner()
+      this.trackingOpencode = false
+      this.outputTail = ""
       this.updateBackgroundIndicator()
-    }, 900)
+    }, OPENCODE_IDLE_TIMEOUT_MS)
   }
 
   startSpinner() {
@@ -504,6 +568,13 @@ export default class extends Controller {
     }
   }
 
+  resetOpencodeTracking() {
+    this.trackingOpencode = false
+    this.inputBuffer = ""
+    this.outputTail = ""
+    this.clearBackgroundActivity()
+  }
+
   updateBackgroundIndicator() {
     if (!this.hasBackgroundIndicatorTarget) return
 
@@ -511,6 +582,6 @@ export default class extends Controller {
     this.backgroundIndicatorTarget.classList.toggle("hidden", !shouldShow)
 
     if (!this.hasBackgroundLabelTarget) return
-    this.backgroundLabelTarget.textContent = this.isBackgroundBusy ? "agent working" : "terminal idle"
+    this.backgroundLabelTarget.textContent = this.isBackgroundBusy ? "opencode running" : "terminal idle"
   }
 }
