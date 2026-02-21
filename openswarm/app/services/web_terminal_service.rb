@@ -34,8 +34,9 @@ class WebTerminalService
       shell = default_shell
       session_id = SecureRandom.hex(16)
       env = shell_environment(path, shell)
+      shell_args = login_shell? ? ["-il"] : ["-i"]
 
-      master, pid = PTY.spawn(env, shell, "-il", chdir: path)
+      master, pid = PTY.spawn(env, shell, *shell_args, chdir: path)
       session = Session.new(id: session_id, path: path, master: master, pid: pid, subscribers: 0, shell: shell)
       session.reader_thread = start_reader_thread(session)
 
@@ -197,6 +198,11 @@ class WebTerminalService
         "LANG" => ENV.fetch("LANG", "en_US.UTF-8"),
         "LC_ALL" => ENV["LC_ALL"].to_s
       }.compact
+    end
+
+    def login_shell?
+      value = ENV.fetch("OPENSWARM_TERMINAL_LOGIN_SHELL", "false")
+      ActiveModel::Type::Boolean.new.cast(value)
     end
   end
 end

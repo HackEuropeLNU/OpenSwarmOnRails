@@ -11,7 +11,6 @@ export default class extends Controller {
   static targets = [
     "canvas",
     "node",
-    "nodeCard",
     "details",
     "detailsState",
     "detailsBranch",
