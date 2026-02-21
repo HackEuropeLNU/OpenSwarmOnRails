@@ -37,11 +37,14 @@ export default class extends Controller {
     this.term = null
     this.fitAddon = null
     this.sessionId = null
+    this.activePath = null
     this.panelVisible = false
     this.unackedChars = 0     // renderer-side flow control counter
     this.ipcCleanups = []     // IPC listener cleanup functions
     this.acceptDesktopDataBeforeSessionId = false
     this.pendingDesktopSessionId = null
+    this.desktopSessionsByPath = new Map()
+    this.desktopPathBySessionId = new Map()
     this.spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     this.spinnerFrameIndex = 0
     this.spinnerIntervalId = null
@@ -94,10 +97,17 @@ export default class extends Controller {
       })
 
       const offExit = desktopTerminal.onExit((sessionId, _exitCode) => {
+        const mappedPath = this.desktopPathBySessionId.get(sessionId)
+        if (mappedPath) {
+          this.desktopSessionsByPath.delete(mappedPath)
+          this.desktopPathBySessionId.delete(sessionId)
+        }
+
         if (sessionId !== this.sessionId) return
         debug("received terminal:exit", { sessionId })
         this.statusTarget.textContent = "exited"
         this.sessionId = null
+        this.activePath = null
         this.resetOpencodeTracking()
         this.updateBackgroundIndicator()
       })
@@ -190,7 +200,8 @@ export default class extends Controller {
   }
 
   async _openDesktopTerminal(payload) {
-    const path = payload.path
+    const rawPath = payload.path
+    const path = this.normalizePath(rawPath)
     if (!path) {
       console.error(TAG, "_openDesktopTerminal missing path", payload)
       return
@@ -198,14 +209,24 @@ export default class extends Controller {
 
     debug("_openDesktopTerminal", { path, existingSessionId: this.sessionId })
 
-    // If we already have a live session, just re-show
-    if (this.sessionId) {
-      debug("session already exists; re-show panel", { sessionId: this.sessionId })
+    const existingSession = this.desktopSessionsByPath.get(path)
+    if (existingSession) {
+      this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
+      this.sessionId = existingSession.sessionId
+      this.activePath = path
+      this.pathTarget.textContent = path
+      this.shellTarget.textContent = existingSession.shell || ""
+      this.statusTarget.textContent = "connected"
       this.showPanel()
+      this.setupTerminal()
+      this.attachDesktopTerminalHandlers()
+      this.term.focus()
+      this.resizeTerminal()
+      this.updateBackgroundIndicator()
       return
     }
 
-    this.destroyTerminal()
+    this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
     this.acceptDesktopDataBeforeSessionId = true
     this.pendingDesktopSessionId = null
 
@@ -228,27 +249,15 @@ export default class extends Controller {
       }
 
       this.sessionId = result.sessionId
+      this.activePath = path
       this.acceptDesktopDataBeforeSessionId = false
       this.pendingDesktopSessionId = null
       this.shellTarget.textContent = result.shell
       this.statusTarget.textContent = "connected"
+      this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
+      this.desktopPathBySessionId.set(result.sessionId, path)
 
-      // Wire input: keystrokes -> IPC -> PTY
-      this.term.onData((data) => {
-        if (!this.sessionId) return
-        this.trackInputForOpencode(data)
-        if (data && data.trim()) {
-          debug("term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
-        }
-        desktopTerminal.write(this.sessionId, data)
-      })
-
-      // Wire resize: xterm resize -> IPC -> PTY
-      this.term.onResize(({ cols, rows }) => {
-        if (!this.sessionId) return
-        debug("term.onResize", { sessionId: this.sessionId, cols, rows })
-        desktopTerminal.resize(this.sessionId, cols, rows)
-      })
+      this.attachDesktopTerminalHandlers()
 
       this.term.focus()
       this.resizeTerminal()
@@ -257,8 +266,28 @@ export default class extends Controller {
       this.acceptDesktopDataBeforeSessionId = false
       this.pendingDesktopSessionId = null
       this.statusTarget.textContent = "error"
+      this.activePath = null
       console.error("Failed to create desktop terminal:", err)
     }
+  }
+
+  attachDesktopTerminalHandlers() {
+    if (!this.term) return
+
+    this.term.onData((data) => {
+      if (!this.sessionId) return
+      this.trackInputForOpencode(data)
+      if (data && data.trim()) {
+        debug("term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
+      }
+      desktopTerminal.write(this.sessionId, data)
+    })
+
+    this.term.onResize(({ cols, rows }) => {
+      if (!this.sessionId) return
+      debug("term.onResize", { sessionId: this.sessionId, cols, rows })
+      desktopTerminal.resize(this.sessionId, cols, rows)
+    })
   }
 
   _openBrowserTerminal(payload) {
@@ -421,13 +450,20 @@ export default class extends Controller {
 
   destroyTerminal({ killRemote = true, closeRemoteBrowser = false } = {}) {
     debug("destroyTerminal", { isDesktop, sessionId: this.sessionId })
+    const previousSessionId = this.sessionId
+    const previousPath = this.activePath
+
     // Desktop: kill PTY via IPC
-    if (killRemote && isDesktop && this.sessionId) {
-      desktopTerminal.kill(this.sessionId)
+    if (killRemote && isDesktop && previousSessionId) {
+      desktopTerminal.kill(previousSessionId)
+      const mappedPath = this.desktopPathBySessionId.get(previousSessionId) || previousPath
+      if (mappedPath) this.desktopSessionsByPath.delete(mappedPath)
+      this.desktopPathBySessionId.delete(previousSessionId)
     }
 
     this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
     this.sessionId = null
+    this.activePath = null
     this.unackedChars = 0
     this.acceptDesktopDataBeforeSessionId = false
     this.pendingDesktopSessionId = null
@@ -583,5 +619,10 @@ export default class extends Controller {
 
     if (!this.hasBackgroundLabelTarget) return
     this.backgroundLabelTarget.textContent = this.isBackgroundBusy ? "opencode running" : "terminal idle"
+  }
+
+  normalizePath(path) {
+    if (!path) return ""
+    return String(path).trim().replace(/\/+$/, "") || "/"
   }
 }
