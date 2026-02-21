@@ -34,6 +34,8 @@ python3 -m http.server 4173
 
 Then open `http://localhost:4173/ui_scaffold/`.
 
+Note: the scaffold is static UI only. Creating worktrees and opening terminals are implemented in the Rails app at `http://localhost:3000/`.
+
 ### Keyboard hints
 
 - `j` / `k`: move selected worktree node

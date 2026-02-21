@@ -8,11 +8,11 @@ dev:
 	@echo "Starting UI scaffold on http://localhost:$(FRONTEND_PORT)/ui_scaffold/"
 	@trap 'kill 0' INT TERM EXIT; \
 	PORT=$(BACKEND_PORT) ./openswarm/bin/dev & \
-	python3 -m http.server $(FRONTEND_PORT) --directory ui_scaffold & \
+	python3 -m http.server $(FRONTEND_PORT) & \
 	wait
 
 dev-backend:
 	@PORT=$(BACKEND_PORT) ./openswarm/bin/dev
 
 dev-frontend:
-	@python3 -m http.server $(FRONTEND_PORT) --directory ui_scaffold
+	@python3 -m http.server $(FRONTEND_PORT)
