@@ -5,8 +5,20 @@ require "securerandom"
 require "base64"
 
 class WebTerminalService
+  DETACHED_SESSION_TTL = 30.minutes
+
   Result = Struct.new(:success, :data, :error, keyword_init: true)
-  Session = Struct.new(:id, :path, :master, :pid, :reader_thread, :subscribers, keyword_init: true)
+  Session = Struct.new(
+    :id,
+    :path,
+    :master,
+    :pid,
+    :reader_thread,
+    :subscribers,
+    :detached_at,
+    :shell,
+    keyword_init: true
+  )
 
   class << self
     def open(path)
@@ -14,12 +26,17 @@ class WebTerminalService
 
       cleanup_closed_sessions!
 
+      existing = find_reusable_session(path)
+      if existing
+        return Result.new(success: true, data: { session_id: existing.id, path: existing.path, shell: existing.shell })
+      end
+
       shell = default_shell
       session_id = SecureRandom.hex(16)
       env = shell_environment(path, shell)
 
       master, pid = PTY.spawn(env, shell, "-il", chdir: path)
-      session = Session.new(id: session_id, path: path, master: master, pid: pid, subscribers: 0)
+      session = Session.new(id: session_id, path: path, master: master, pid: pid, subscribers: 0, shell: shell)
       session.reader_thread = start_reader_thread(session)
 
       mutex.synchronize { sessions[session_id] = session }
@@ -34,12 +51,17 @@ class WebTerminalService
     def subscribe(session_id)
       with_session(session_id) do |session|
         session.subscribers += 1
+        session.detached_at = nil
         true
       end || false
     end
 
     def unsubscribe(session_id)
-      close(session_id)
+      with_session(session_id) do |session|
+        session.subscribers = [ session.subscribers.to_i - 1, 0 ].max
+        session.detached_at = Time.current if session.subscribers.zero?
+        true
+      end || false
     end
 
     def write(session_id, data)
@@ -136,10 +158,27 @@ class WebTerminalService
       stale_ids = mutex.synchronize do
         sessions.each_with_object([]) do |(id, session), ids|
           ids << id if session.master.closed?
+
+          next unless session.subscribers.to_i.zero?
+          next unless session.detached_at
+
+          ids << id if session.detached_at <= Time.current - DETACHED_SESSION_TTL
         end
       end
 
       stale_ids.each { |id| close(id) }
+    end
+
+    def find_reusable_session(path)
+      normalized = File.expand_path(path)
+
+      mutex.synchronize do
+        sessions.values.find do |session|
+          next false if session.master.closed?
+
+          File.expand_path(session.path) == normalized
+        end
+      end
     end
 
     def default_shell
