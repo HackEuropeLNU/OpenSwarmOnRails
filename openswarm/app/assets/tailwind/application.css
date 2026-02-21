@@ -119,3 +119,53 @@ button:focus-visible {
   outline: 1px solid rgba(37, 99, 235, 0.5);
   outline-offset: 2px;
 }
+
+/* ═══ Terminal cleanup + sizing (xterm fallback) ═══ */
+.terminal-wrap .xterm {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.terminal-wrap .xterm:focus,
+.terminal-wrap .xterm .xterm-helper-textarea:focus {
+  outline: none;
+}
+
+.terminal-wrap .xterm .xterm-screen,
+.terminal-wrap .xterm .xterm-helpers,
+.terminal-wrap .xterm .xterm-viewport {
+  position: absolute;
+  inset: 0;
+}
+
+.terminal-wrap .xterm .xterm-helper-textarea {
+  position: absolute;
+  top: 0;
+  left: -9999em;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: -1;
+}
+
+.terminal-wrap .xterm .xterm-char-measure-element {
+  position: absolute;
+  top: 0;
+  left: -9999em;
+  display: inline-block;
+  visibility: hidden;
+  line-height: normal;
+}
+
+.terminal-wrap .xterm .xterm-viewport {
+  overflow-y: auto;
+}
