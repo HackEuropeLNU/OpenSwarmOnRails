@@ -2,6 +2,7 @@
 
 require "pty"
 require "securerandom"
+require "base64"
 
 class WebTerminalService
   Result = Struct.new(:success, :data, :error, keyword_init: true)
@@ -116,7 +117,14 @@ class WebTerminalService
       Thread.new do
         loop do
           chunk = session.master.readpartial(4096)
-          ActionCable.server.broadcast(stream_name_for(session.id), { type: "output", data: chunk })
+          ActionCable.server.broadcast(
+            stream_name_for(session.id),
+            {
+              type: "output",
+              encoding: "base64",
+              data: Base64.strict_encode64(chunk)
+            }
+          )
         end
       rescue EOFError, Errno::EIO, IOError
         ActionCable.server.broadcast(stream_name_for(session.id), { type: "closed" })
