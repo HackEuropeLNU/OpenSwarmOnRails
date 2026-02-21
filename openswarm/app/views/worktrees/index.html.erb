@@ -91,12 +91,12 @@
                     title="Open terminal in this worktree"
                     data-graph-keyboard-target="node">
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
-                        bg-[#111827]/90 backdrop-blur-sm
+                        bg-white/95 backdrop-blur-sm
                         hover:-translate-y-0.5 hover:shadow-lg
-                        <%= is_selected ? 'node-glow-selected border-blue-500/40 ring-1 ring-blue-400/20' :
-                            wt.dirty ? 'node-glow-dirty border-red-500/30' :
-                            wt.parent_branch.nil? ? 'node-glow border-amber-500/20' :
-                            'node-glow border-slate-700/50 hover:border-slate-600/60' %>">
+                        <%= is_selected ? 'node-glow-selected border-blue-300 ring-1 ring-blue-300/40 bg-blue-50/70' :
+                            wt.dirty ? 'node-glow-dirty border-red-300 bg-red-50/40' :
+                            wt.parent_branch.nil? ? 'node-glow border-amber-300 bg-amber-50/35' :
+                            'node-glow border-slate-200 hover:border-slate-300' %>">
 
               <%# Branch name %>
               <div class="flex items-center justify-between gap-2">
@@ -131,8 +131,8 @@
 
             <button type="button"
                     class="node-create-btn absolute left-1/2 top-full mt-2.5 w-8 h-8 rounded-full
-                           border border-blue-400/40 bg-[#101b33]/95 text-blue-300 text-[18px] leading-none
-                           flex items-center justify-center shadow-lg shadow-blue-900/20
+                           border border-blue-300 bg-white/95 text-blue-600 text-[18px] leading-none
+                           flex items-center justify-center shadow-lg shadow-blue-200/50
                            -translate-x-1/2 -translate-y-1 scale-95 opacity-0 pointer-events-none
                            transition-all duration-200 ease-out
                            group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-hover:pointer-events-auto
