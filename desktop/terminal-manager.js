@@ -3,6 +3,10 @@ const pty = require("node-pty");
 const { randomUUID } = require("crypto");
 
 const TAG = "[DEBUG:TerminalManager]";
+const DEBUG = process.env.OPENSWARM_DEBUG_TERMINAL === "1";
+const debug = (...args) => {
+  if (DEBUG) console.log(TAG, ...args);
+};
 
 // ── Flow control constants (matches VS Code approach) ──
 const HIGH_WATERMARK = 100000; // pause pty after this many unacked chars
@@ -11,7 +15,7 @@ const LOW_WATERMARK = 5000;    // resume pty after acked below this
 class TerminalManager {
   constructor() {
     this.sessions = new Map(); // sessionId -> SessionState
-    console.log(TAG, "constructed, node-pty version:", require("node-pty/package.json").version);
+    debug("constructed, node-pty version:", require("node-pty/package.json").version);
   }
 
   /**
@@ -27,7 +31,7 @@ class TerminalManager {
     const shell = process.env.SHELL || (os.platform() === "win32" ? "powershell.exe" : "/bin/zsh");
     const sessionId = randomUUID();
 
-    console.log(TAG, "create() called — cwd:", cwd, "cols:", cols, "rows:", rows, "shell:", shell);
+    debug("create() called - cwd:", cwd, "cols:", cols, "rows:", rows, "shell:", shell);
 
     let ptyProcess;
     try {
@@ -42,7 +46,7 @@ class TerminalManager {
           COLORTERM: "truecolor"
         }
       });
-      console.log(TAG, "pty.spawn() succeeded — pid:", ptyProcess.pid, "sessionId:", sessionId);
+      debug("pty.spawn() succeeded - pid:", ptyProcess.pid, "sessionId:", sessionId);
     } catch (err) {
       console.error(TAG, "pty.spawn() FAILED:", err.message, err.stack);
       throw err;
@@ -65,16 +69,16 @@ class TerminalManager {
     session.dataDisposable = ptyProcess.onData((data) => {
       dataChunks++;
       if (dataChunks <= 3) {
-        console.log(TAG, `onData chunk #${dataChunks} sessionId:${sessionId} len:${data.length} preview:${JSON.stringify(data.slice(0, 80))}`);
+        debug(`onData chunk #${dataChunks} sessionId:${sessionId} len:${data.length} preview:${JSON.stringify(data.slice(0, 80))}`);
       } else if (dataChunks === 4) {
-        console.log(TAG, `onData — suppressing further data logs for sessionId:${sessionId}`);
+        debug(`onData - suppressing further data logs for sessionId:${sessionId}`);
       }
 
       session.unackedChars += data.length;
 
       // Flow control: pause if renderer is behind
       if (!session.paused && session.unackedChars > HIGH_WATERMARK) {
-        console.log(TAG, "PAUSING pty — unackedChars:", session.unackedChars, "sessionId:", sessionId);
+        debug("PAUSING pty - unackedChars:", session.unackedChars, "sessionId:", sessionId);
         ptyProcess.pause();
         session.paused = true;
       }
@@ -83,7 +87,7 @@ class TerminalManager {
     });
 
     session.exitDisposable = ptyProcess.onExit(({ exitCode }) => {
-      console.log(TAG, "onExit — sessionId:", sessionId, "exitCode:", exitCode);
+      debug("onExit - sessionId:", sessionId, "exitCode:", exitCode);
       session.state = "exited";
       onExit(sessionId, exitCode);
       this._cleanup(sessionId);
@@ -92,7 +96,7 @@ class TerminalManager {
     this.sessions.set(sessionId, session);
 
     const result = { sessionId, shell, cwd };
-    console.log(TAG, "create() returning:", JSON.stringify(result));
+    debug("create() returning:", JSON.stringify(result));
     return result;
   }
 
@@ -102,7 +106,7 @@ class TerminalManager {
   write(sessionId, data) {
     const session = this.sessions.get(sessionId);
     if (!session || session.state === "exited") {
-      console.log(TAG, "write() — session not found or exited, sessionId:", sessionId);
+      debug("write() - session not found or exited, sessionId:", sessionId);
       return false;
     }
     session.pty.write(data);
@@ -115,12 +119,12 @@ class TerminalManager {
   resize(sessionId, cols, rows) {
     const session = this.sessions.get(sessionId);
     if (!session || session.state === "exited") {
-      console.log(TAG, "resize() — session not found or exited, sessionId:", sessionId);
+      debug("resize() - session not found or exited, sessionId:", sessionId);
       return false;
     }
     cols = Math.max(1, Math.min(cols, 1000));
     rows = Math.max(1, Math.min(rows, 500));
-    console.log(TAG, "resize() — sessionId:", sessionId, "cols:", cols, "rows:", rows);
+    debug("resize() - sessionId:", sessionId, "cols:", cols, "rows:", rows);
     try {
       session.pty.resize(cols, rows);
     } catch (_e) {
@@ -138,7 +142,7 @@ class TerminalManager {
     if (!session) return;
     session.unackedChars = Math.max(0, session.unackedChars - charCount);
     if (session.paused && session.unackedChars < LOW_WATERMARK) {
-      console.log(TAG, "RESUMING pty — unackedChars:", session.unackedChars, "sessionId:", sessionId);
+      debug("RESUMING pty - unackedChars:", session.unackedChars, "sessionId:", sessionId);
       session.pty.resume();
       session.paused = false;
     }
@@ -150,10 +154,10 @@ class TerminalManager {
   kill(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      console.log(TAG, "kill() — session not found, sessionId:", sessionId);
+      debug("kill() - session not found, sessionId:", sessionId);
       return false;
     }
-    console.log(TAG, "kill() — sessionId:", sessionId);
+    debug("kill() - sessionId:", sessionId);
     try {
       session.pty.kill();
     } catch (_e) {
