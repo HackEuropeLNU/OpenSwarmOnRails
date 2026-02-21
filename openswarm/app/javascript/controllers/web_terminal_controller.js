@@ -395,6 +395,13 @@ export default class extends Controller {
   }
 
   handleEscape(event) {
+    const minimizeShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g"
+    if (minimizeShortcut && this.panelVisible) {
+      event.preventDefault()
+      this.hidePanel()
+      return
+    }
+
     if (event.key === "Escape" && this.panelVisible) {
       this.hidePanel()
     }
