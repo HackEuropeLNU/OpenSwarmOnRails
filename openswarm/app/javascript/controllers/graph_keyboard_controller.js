@@ -26,17 +26,20 @@ export default class extends Controller {
     "createParent",
     "replaceModal",
     "replaceBranch",
+    "replaceCancel",
     "deleteModal",
     "deleteBranch",
     "deleteDirty",
     "deleteForce",
+    "deleteCancel",
     "commitModal",
     "commitBranch",
     "commitInput",
     "mergeConflictModal",
     "mergeConflictSource",
     "mergeConflictTarget",
-    "mergeConflictFiles"
+    "mergeConflictFiles",
+    "mergeConflictManual"
   ]
 
   static values = {
@@ -572,6 +575,7 @@ export default class extends Controller {
     this.mergeConflictTargetTarget.textContent = this.pendingMergeConflict.targetBranch
     this.mergeConflictFilesTarget.textContent = files.length > 0 ? files.join("\n") : "(none reported)"
     this.mergeConflictModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.mergeConflictManualTarget)
   }
 
   cancelMergeConflictResolution(event) {
@@ -689,6 +693,7 @@ export default class extends Controller {
     this.replaceBranchTarget.textContent = branchName
     this.createModalTarget.classList.add("hidden")
     this.replaceModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.replaceCancelTarget)
   }
 
   cancelReplaceCreate(event) {
@@ -802,6 +807,7 @@ export default class extends Controller {
     this.deleteBranchTarget.textContent = branch
     this.deleteDirtyTarget.textContent = dirty ? "yes" : "no"
     this.deleteModalTarget.classList.remove("hidden")
+    this.focusDefaultChoice(this.deleteCancelTarget)
   }
 
   cancelDelete(event) {
@@ -1038,6 +1044,11 @@ export default class extends Controller {
     } finally {
       this.openTerminalInFlight = false
     }
+  }
+
+  focusDefaultChoice(element) {
+    if (!(element instanceof HTMLElement)) return
+    requestAnimationFrame(() => element.focus())
   }
 
 }

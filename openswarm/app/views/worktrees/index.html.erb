@@ -385,10 +385,11 @@
       </p>
       <div class="flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1"
+                data-graph-keyboard-target="replaceCancel"
                 data-action="click->graph-keyboard#cancelReplaceCreate">no</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">delete and create</button>
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">delete and create</button>
       </div>
     </form>
   </div>
@@ -410,10 +411,11 @@
       </p>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1"
+                data-graph-keyboard-target="deleteCancel"
                 data-action="click->graph-keyboard#cancelDelete">no</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">yes</button>
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">yes</button>
       </div>
     </form>
   </div>
@@ -462,10 +464,11 @@
            data-graph-keyboard-target="mergeConflictFiles"></pre>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1"
+                data-graph-keyboard-target="mergeConflictManual"
                 data-action="click->graph-keyboard#cancelMergeConflictResolution">resolve manually</button>
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100"
+                class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-1"
                 data-action="click->graph-keyboard#resolveMergeConflictWithAgent">resolve with agent</button>
       </div>
     </form>
