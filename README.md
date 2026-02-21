@@ -26,6 +26,12 @@ OPENSWARM_REPO_ROOTS="/absolute/path/to/your/repo" make dev-backend
 
 Use multiple roots by separating them with `:`.
 
+If your Rails app directory is named differently, override it:
+
+```bash
+OPENSWARMONRAILS_DIR="openswarmonrails" make dev-backend
+```
+
 Start backend + frontend together:
 
 ```bash
