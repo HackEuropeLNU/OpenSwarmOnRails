@@ -82,11 +82,19 @@ export default class extends Controller {
     switch (event.key) {
       case "j":
         event.preventDefault()
-        this.moveSelection(1)
+        this.moveSelectionByAxis("down")
         break
       case "k":
         event.preventDefault()
-        this.moveSelection(-1)
+        this.moveSelectionByAxis("up")
+        break
+      case "h":
+        event.preventDefault()
+        this.moveSelectionByAxis("left")
+        break
+      case "l":
+        event.preventDefault()
+        this.moveSelectionByAxis("right")
         break
       case "r":
         if (!event.ctrlKey && !event.metaKey) {
@@ -124,6 +132,59 @@ export default class extends Controller {
     const newId = nodes[nextIndex].dataset.nodeId
     if (newId !== this.selectedValue) {
       this.selectNodeById(newId)
+    }
+  }
+
+  moveSelectionByAxis(direction) {
+    const nodes = this.nodeTargets
+    if (nodes.length === 0) return
+
+    const currentNode = nodes.find((node) => node.dataset.nodeId === this.selectedValue) || nodes[0]
+    if (!currentNode) return
+
+    const currentCenter = this.nodeCenter(currentNode)
+    let bestNode = null
+    let bestScore = Number.POSITIVE_INFINITY
+
+    nodes.forEach((candidate) => {
+      if (candidate === currentNode) return
+
+      const candidateCenter = this.nodeCenter(candidate)
+      const dx = candidateCenter.x - currentCenter.x
+      const dy = candidateCenter.y - currentCenter.y
+
+      if (direction === "up" && dy >= 0) return
+      if (direction === "down" && dy <= 0) return
+      if (direction === "left" && dx >= 0) return
+      if (direction === "right" && dx <= 0) return
+
+      const primary = direction === "left" || direction === "right" ? Math.abs(dx) : Math.abs(dy)
+      const secondary = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx)
+      const score = primary + secondary * 2
+
+      if (score < bestScore) {
+        bestScore = score
+        bestNode = candidate
+      }
+    })
+
+    if (bestNode) {
+      this.selectNodeById(bestNode.dataset.nodeId)
+      return
+    }
+
+    if (direction === "up" || direction === "left") {
+      this.moveSelection(-1)
+    } else {
+      this.moveSelection(1)
+    }
+  }
+
+  nodeCenter(node) {
+    const rect = node.getBoundingClientRect()
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
     }
   }
 
