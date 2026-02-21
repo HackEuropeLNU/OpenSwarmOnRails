@@ -37,6 +37,8 @@ export default class extends Controller {
     this.panelVisible = false
     this.unackedChars = 0     // renderer-side flow control counter
     this.ipcCleanups = []     // IPC listener cleanup functions
+    this.acceptDesktopDataBeforeSessionId = false
+    this.pendingDesktopSessionId = null
     this.spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     this.spinnerFrameIndex = 0
     this.spinnerIntervalId = null
@@ -57,7 +59,18 @@ export default class extends Controller {
     if (isDesktop) {
       debug("desktop mode: subscribing to IPC events")
       const offData = desktopTerminal.onData((sessionId, data) => {
-        if (sessionId !== this.sessionId || !this.term) return
+        if (!this.term) return
+
+        const activeSessionMatch = Boolean(this.sessionId) && sessionId === this.sessionId
+        const pendingSessionMatch = !this.sessionId && this.acceptDesktopDataBeforeSessionId &&
+          (!this.pendingDesktopSessionId || this.pendingDesktopSessionId === sessionId)
+
+        if (!activeSessionMatch && !pendingSessionMatch) return
+
+        if (!this.sessionId && pendingSessionMatch && !this.pendingDesktopSessionId) {
+          this.pendingDesktopSessionId = sessionId
+        }
+
         if (this.unackedChars === 0) {
           debug("first terminal:data chunk", { sessionId, len: data.length, preview: data.slice(0, 80) })
         }
@@ -99,6 +112,7 @@ export default class extends Controller {
     this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
+    document.documentElement.classList.remove("overflow-hidden")
   }
 
   // ── Show / hide without destroying the PTY ──
@@ -107,6 +121,7 @@ export default class extends Controller {
     debug("showPanel")
     this.panelTarget.classList.remove("hidden")
     this.panelVisible = true
+    document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
 
     requestAnimationFrame(() => {
@@ -122,6 +137,7 @@ export default class extends Controller {
     debug("hidePanel")
     this.panelTarget.classList.add("hidden")
     this.panelVisible = false
+    document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
   }
 
@@ -183,6 +199,8 @@ export default class extends Controller {
     }
 
     this.destroyTerminal()
+    this.acceptDesktopDataBeforeSessionId = true
+    this.pendingDesktopSessionId = null
 
     this.pathTarget.textContent = path
     this.statusTarget.textContent = "creating"
@@ -197,7 +215,14 @@ export default class extends Controller {
     try {
       const result = await desktopTerminal.create({ cwd: path, cols, rows })
       debug("desktopTerminal.create result", result)
+
+      if (this.pendingDesktopSessionId && this.pendingDesktopSessionId !== result.sessionId) {
+        this.term?.reset()
+      }
+
       this.sessionId = result.sessionId
+      this.acceptDesktopDataBeforeSessionId = false
+      this.pendingDesktopSessionId = null
       this.shellTarget.textContent = result.shell
       this.statusTarget.textContent = "connected"
 
@@ -221,6 +246,8 @@ export default class extends Controller {
       this.resizeTerminal()
       this.updateBackgroundIndicator()
     } catch (err) {
+      this.acceptDesktopDataBeforeSessionId = false
+      this.pendingDesktopSessionId = null
       this.statusTarget.textContent = "error"
       console.error("Failed to create desktop terminal:", err)
     }
@@ -389,6 +416,11 @@ export default class extends Controller {
     this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
     this.sessionId = null
     this.unackedChars = 0
+    this.acceptDesktopDataBeforeSessionId = false
+    this.pendingDesktopSessionId = null
+    if (!this.panelVisible) {
+      document.documentElement.classList.remove("overflow-hidden")
+    }
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
 

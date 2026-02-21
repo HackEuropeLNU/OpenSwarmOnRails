@@ -397,26 +397,22 @@
   </div>
 
   <%# ═══ Terminal overlay (hide/show, PTY stays alive in background) ═══ %>
-  <div class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[1px]"
+  <div class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/55 backdrop-blur-[2px] p-0 sm:p-4"
        data-web-terminal-target="panel"
        data-action="click->web-terminal#backdropClose">
-    <div class="w-full sm:w-[92vw] sm:max-w-6xl h-[78vh] sm:h-[72vh] mb-0 sm:mb-8 rounded-t-2xl sm:rounded-2xl overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl shadow-slate-900/60">
-      <div class="h-11 px-4 border-b border-slate-700/80 bg-slate-950/70 flex items-center gap-3">
-        <div class="flex items-center gap-1.5">
-          <button type="button" title="Kill terminal"
-                  class="w-2.5 h-2.5 rounded-full bg-red-400/80 hover:bg-red-500 transition-colors cursor-pointer"
-                  data-action="click->web-terminal#killTerminal"></button>
-          <button type="button" title="Minimize (keep running)"
-                  class="w-2.5 h-2.5 rounded-full bg-amber-300/80 hover:bg-amber-400 transition-colors cursor-pointer"
-                  data-action="click->web-terminal#closePanel"></button>
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/80"></span>
+    <div class="w-full sm:w-[94vw] sm:max-w-6xl h-[82vh] sm:h-[74vh] mb-0 sm:mb-6 rounded-t-2xl sm:rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-900 shadow-[0_20px_80px_rgba(2,6,23,0.72)]">
+      <div class="h-12 px-4 border-b border-slate-700/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 flex items-center gap-3">
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span class="w-2.5 h-2.5 rounded-full bg-red-400/85"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-300/85"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/85"></span>
         </div>
-        <div class="ml-2 text-[11px] text-slate-300 font-mono truncate">
+        <div class="min-w-0 flex-1 text-[11px] text-slate-300 font-mono truncate">
           <span data-web-terminal-target="path"></span>
         </div>
-        <div class="ml-auto flex items-center gap-3 text-[10px] font-mono text-slate-400">
-          <span>shell: <span data-web-terminal-target="shell"></span></span>
-          <span>status: <span data-web-terminal-target="status">idle</span></span>
+        <div class="ml-auto flex items-center gap-2 text-[10px] font-mono text-slate-300 shrink-0">
+          <span class="hidden sm:inline-flex px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 text-slate-400">shell: <span class="ml-1 text-slate-300" data-web-terminal-target="shell"></span></span>
+          <span class="inline-flex min-w-20 justify-center px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 text-slate-300">status: <span class="ml-1" data-web-terminal-target="status">idle</span></span>
           <button type="button"
                   class="px-2 py-1 rounded-md border border-slate-600 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
                   data-action="click->web-terminal#closePanel"
@@ -427,8 +423,8 @@
                   title="Kill terminal session">kill</button>
         </div>
       </div>
-      <div class="h-[calc(100%-2.75rem)] p-2 bg-slate-900 terminal-wrap">
-        <div class="w-full h-full rounded-lg overflow-hidden"
+      <div class="h-[calc(100%-3rem)] p-2 sm:p-3 bg-gradient-to-b from-slate-900 to-slate-950 terminal-wrap">
+        <div class="w-full h-full rounded-lg overflow-hidden border border-slate-800/90 bg-[#070b14]"
              data-web-terminal-target="terminal"></div>
       </div>
     </div>
