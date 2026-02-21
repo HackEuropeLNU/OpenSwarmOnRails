@@ -420,6 +420,7 @@ export default class extends Controller {
 
     this.term = new Terminal({
       cursorBlink: true,
+      rendererType: "dom",
       fontFamily: '"SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 14,
       lineHeight: 1.32,
