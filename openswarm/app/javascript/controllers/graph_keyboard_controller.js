@@ -1037,6 +1037,31 @@ export default class extends Controller {
         return
       }
 
+      // Check if user prefers an external terminal app
+      // Skip external terminal when initialCommand is provided (e.g., merge conflict resolution)
+      // since external terminals can't receive commands programmatically
+      const terminalMode = await this.getTerminalMode()
+      debug("terminal mode", { terminalMode })
+
+      if (terminalMode && terminalMode !== "built-in" && !options.initialCommand) {
+        // Open external terminal application
+        debug("opening external terminal", { path, terminalMode })
+        try {
+          const result = await window.desktopShell.externalTerminal.open({
+            cwd: path,
+            terminalId: terminalMode
+          })
+          if (!result.success) {
+            console.error(TAG, "failed to open external terminal", result.error)
+            window.alert(`Failed to open external terminal: ${result.error || "Unknown error"}`)
+          }
+        } catch (err) {
+          console.error(TAG, "external terminal error", err)
+          window.alert(`Failed to open external terminal: ${err.message || "Unknown error"}`)
+        }
+        return
+      }
+
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
           detail: {
@@ -1100,6 +1125,17 @@ export default class extends Controller {
     } finally {
       this.openTerminalInFlight = false
     }
+  }
+
+  async getTerminalMode() {
+    try {
+      if (typeof window.desktopShell?.settings?.get === "function") {
+        return await window.desktopShell.settings.get("terminalMode")
+      }
+    } catch (err) {
+      debug("getTerminalMode failed", err)
+    }
+    return "system-default"
   }
 
   focusDefaultChoice(element) {
