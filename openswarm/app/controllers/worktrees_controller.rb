@@ -220,7 +220,10 @@ class WorktreesController < ApplicationController
     assign_x = nil
     assign_x = lambda do |id|
       return x_units[id] if x_units.key?(id)
-      return cursor if placing[id]
+      if placing[id]
+        x_units[id] ||= cursor
+        return x_units[id]
+      end
 
       placing[id] = true
       child_ids = children_by_id[id]
@@ -234,7 +237,9 @@ class WorktreesController < ApplicationController
         child_ids.each { |child_id| assign_x.call(child_id) }
         first_child = child_ids.first
         last_child = child_ids.last
-        x_units[id] = (x_units[first_child] + x_units[last_child]) * 0.5
+        first_x = x_units[first_child] || assign_x.call(first_child)
+        last_x = x_units[last_child] || assign_x.call(last_child)
+        x_units[id] = (first_x + last_x) * 0.5
       end
 
       placing.delete(id)
