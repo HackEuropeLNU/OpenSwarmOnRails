@@ -12,6 +12,15 @@ export default class extends Controller {
     "canvas",
     "node",
     "details",
+    "detailsState",
+    "detailsBranch",
+    "detailsPath",
+    "detailsHead",
+    "detailsDirtyDot",
+    "detailsDirtyText",
+    "detailsAhead",
+    "detailsBehind",
+    "listItem",
     "createModal",
     "createInput",
     "createParent",
@@ -38,15 +47,18 @@ export default class extends Controller {
     })
     this.boundKeydown = this.handleKeydown.bind(this)
     document.addEventListener("keydown", this.boundKeydown)
-    this.pendingSelectTimeout = null
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
-    this.highlightSelected()
+    this.openTerminalInFlight = false
+
+    const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
+    if (initialId) {
+      this.selectNodeById(initialId, { syncUrl: false })
+    }
   }
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
-    this.clearPendingSelect()
   }
 
   handleKeydown(event) {
@@ -106,7 +118,7 @@ export default class extends Controller {
 
     const newId = nodes[nextIndex].dataset.nodeId
     if (newId !== this.selectedValue) {
-      this.navigateToNode(newId)
+      this.selectNodeById(newId)
     }
   }
 
@@ -116,13 +128,14 @@ export default class extends Controller {
     const nodeId = button.dataset.nodeId
     if (!nodeId) return
 
-    this.clearPendingSelect()
-    this.pendingSelectTimeout = window.setTimeout(() => {
-      this.pendingSelectTimeout = null
-      if (nodeId !== this.selectedValue) {
-        this.navigateToNode(nodeId)
-      }
-    }, 220)
+    this.selectNodeById(nodeId)
+  }
+
+  selectFromList(event) {
+    event?.preventDefault?.()
+    const nodeId = event.currentTarget?.dataset.nodeId
+    if (!nodeId) return
+    this.selectNodeById(nodeId)
   }
 
   async openNodeTerminal(event) {
@@ -131,26 +144,75 @@ export default class extends Controller {
     const nodeId = button.dataset.nodeId
     if (!nodeId) return
 
-    this.clearPendingSelect()
     await this.openTerminal(nodeId)
   }
 
-  navigateToNode(nodeId) {
-    const url = new URL(window.location)
-    url.searchParams.set("selected", nodeId)
-    Turbo.visit(url.toString(), { action: "replace" })
+  selectNodeById(nodeId, { syncUrl = true } = {}) {
+    if (!nodeId) return
+    this.selectedValue = nodeId
+    this.renderSelectedState()
+    if (syncUrl) {
+      this.syncSelectedToUrl(nodeId)
+    }
   }
 
-  highlightSelected() {
+  syncSelectedToUrl(nodeId) {
+    const url = new URL(window.location)
+    url.searchParams.set("selected", nodeId)
+    window.history.replaceState({}, "", url.toString())
+  }
+
+  renderSelectedState() {
     this.nodeTargets.forEach((node) => {
       const inner = node.querySelector("div")
       if (!inner) return
 
       const isSelected = node.dataset.nodeId === this.selectedValue
-      if (isSelected) {
-        inner.classList.add("node-glow-selected", "ring-1", "ring-blue-200", "border-blue-400")
+      inner.classList.toggle("node-glow-selected", isSelected)
+      inner.classList.toggle("ring-1", isSelected)
+      inner.classList.toggle("ring-blue-300/40", isSelected)
+      inner.classList.toggle("border-blue-300", isSelected)
+      inner.classList.toggle("bg-blue-50/70", isSelected)
+    })
+
+    this.listItemTargets.forEach((item) => {
+      const isSelected = item.dataset.nodeId === this.selectedValue
+      const label = item.querySelector("[data-node-branch-label]")
+
+      item.classList.toggle("bg-blue-50", isSelected)
+      item.classList.toggle("border-blue-200", isSelected)
+      item.classList.toggle("hover:bg-gray-100", !isSelected)
+      if (label) {
+        label.classList.toggle("text-gray-800", isSelected)
+        label.classList.toggle("text-gray-500", !isSelected)
       }
     })
+
+    const selectedNode = this.nodeTargets.find((node) => node.dataset.nodeId === this.selectedValue)
+    this.renderDetails(selectedNode)
+  }
+
+  renderDetails(node) {
+    if (!node) return
+
+    this.detailsBranchTarget.textContent = node.dataset.branch || ""
+    this.detailsPathTarget.textContent = node.dataset.formattedPath || node.dataset.path || ""
+    this.detailsHeadTarget.textContent = node.dataset.headShort || ""
+    this.detailsAheadTarget.textContent = node.dataset.ahead || "0"
+    this.detailsBehindTarget.textContent = node.dataset.behind || "0"
+
+    const isDirty = node.dataset.dirty === "true"
+    this.detailsDirtyTextTarget.textContent = isDirty ? "yes" : "no"
+    this.detailsDirtyTextTarget.classList.toggle("text-red-600", isDirty)
+    this.detailsDirtyTextTarget.classList.toggle("text-emerald-600", !isDirty)
+    this.detailsDirtyDotTarget.classList.toggle("bg-red-500", isDirty)
+    this.detailsDirtyDotTarget.classList.toggle("bg-emerald-500", !isDirty)
+
+    const state = node.dataset.state || "committed"
+    const badgeClass = (node.dataset.badgeClass || "bg-gray-50 text-gray-600 border-gray-200").split(" ")
+    this.detailsStateTarget.className = "text-[10px] px-1.5 py-0.5 rounded-md border font-mono"
+    this.detailsStateTarget.classList.add(...badgeClass)
+    this.detailsStateTarget.textContent = state
   }
 
   refresh() {
@@ -392,13 +454,6 @@ export default class extends Controller {
     debug(`click (${action})`)
   }
 
-  clearPendingSelect() {
-    if (!this.pendingSelectTimeout) return
-
-    window.clearTimeout(this.pendingSelectTimeout)
-    this.pendingSelectTimeout = null
-  }
-
   async parseJsonResponse(response) {
     const raw = await response.text()
     if (!raw) return {}
@@ -436,11 +491,13 @@ export default class extends Controller {
 
     // Browser mode: hit Rails endpoint to spawn PTY via WebTerminalService
     if (!this.openUrlValue || !this.repoValue) return
+    if (this.openTerminalInFlight) return
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
       ?.getAttribute("content")
 
+    this.openTerminalInFlight = true
     try {
       const response = await fetch(this.openUrlValue, {
         method: "POST",
@@ -471,6 +528,8 @@ export default class extends Controller {
       )
     } catch (_error) {
       window.alert("Failed to open terminal")
+    } finally {
+      this.openTerminalInFlight = false
     }
   }
 }

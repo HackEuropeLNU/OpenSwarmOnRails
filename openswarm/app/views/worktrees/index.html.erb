@@ -88,7 +88,6 @@
         <%# Worktree Nodes %>
         <% @layout[:nodes].each do |node_data| %>
           <% wt = node_data[:worktree] %>
-          <% is_selected = wt.id == @selected_id %>
           <div class="absolute group"
                style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;">
             <button type="button"
@@ -96,17 +95,22 @@
                     data-action="click->graph-keyboard#selectNode dblclick->graph-keyboard#openNodeTerminal"
                     data-node-id="<%= wt.id %>"
                     data-path="<%= wt.path %>"
+                    data-formatted-path="<%= format_path(wt.path) %>"
                     data-branch="<%= wt.branch %>"
                     data-dirty="<%= wt.dirty %>"
+                    data-state="<%= wt.state %>"
+                    data-ahead="<%= wt.ahead %>"
+                    data-behind="<%= wt.behind %>"
+                    data-head-short="<%= short_hash(wt.head) %>"
+                    data-badge-class="<%= node_state_badge_class(wt.state) %>"
                     title="Click to select, double-click to open terminal"
                     data-graph-keyboard-target="node">
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
-                        bg-white/95 backdrop-blur-sm
-                        hover:-translate-y-0.5 hover:shadow-lg
-                        <%= is_selected ? 'node-glow-selected border-blue-300 ring-1 ring-blue-300/40 bg-blue-50/70' :
-                            wt.dirty ? 'node-glow-dirty border-red-300 bg-red-50/40' :
-                            wt.parent_branch.nil? ? 'node-glow border-amber-300 bg-amber-50/35' :
-                            'node-glow border-slate-200 hover:border-slate-300' %>">
+                         bg-white/95 backdrop-blur-sm
+                         hover:-translate-y-0.5 hover:shadow-lg
+                         <%= wt.dirty ? 'node-glow-dirty border-red-300 bg-red-50/40' :
+                             wt.parent_branch.nil? ? 'node-glow border-amber-300 bg-amber-50/35' :
+                             'node-glow border-slate-200 hover:border-slate-300' %>">
 
               <%# Branch name %>
               <div class="flex items-center justify-between gap-2">
@@ -197,58 +201,48 @@
       <div class="p-4 border-b border-gray-200" data-graph-keyboard-target="details">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">details</h3>
-          <% if @selected_node %>
-            <span class="text-[10px] px-1.5 py-0.5 rounded-md border font-mono
-                         <%= node_state_badge_class(@selected_node.state) %>">
-              <%= @selected_node.state %>
-            </span>
-          <% end %>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-md border font-mono <%= node_state_badge_class(@selected_node&.state) %>"
+                data-graph-keyboard-target="detailsState"><%= @selected_node&.state || "n/a" %></span>
         </div>
 
-        <% if @selected_node %>
-          <dl class="space-y-2.5">
-            <div class="flex items-start gap-3">
-              <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">branch</dt>
-              <dd class="text-[12px] text-gray-800 font-medium font-mono"><%= @selected_node.branch %></dd>
+        <dl class="space-y-2.5">
+          <div class="flex items-start gap-3">
+            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">branch</dt>
+            <dd class="text-[12px] text-gray-800 font-medium font-mono"
+                data-graph-keyboard-target="detailsBranch"><%= @selected_node&.branch || "-" %></dd>
+          </div>
+          <div class="flex items-start gap-3">
+            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">path</dt>
+            <dd class="text-[11px] text-gray-500 break-all font-mono leading-relaxed"
+                data-graph-keyboard-target="detailsPath"><%= @selected_node ? format_path(@selected_node.path) : "-" %></dd>
+          </div>
+          <div class="flex items-start gap-3">
+            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">HEAD</dt>
+            <dd class="text-[11px] text-gray-500 font-mono"
+                data-graph-keyboard-target="detailsHead"><%= @selected_node ? short_hash(@selected_node.head) : "-" %></dd>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-gray-400 font-mono">dirty</span>
+              <span class="flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full <%= @selected_node&.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"
+                      data-graph-keyboard-target="detailsDirtyDot"></span>
+                <span class="text-[11px] font-mono <%= @selected_node&.dirty ? 'text-red-600' : 'text-emerald-600' %>"
+                      data-graph-keyboard-target="detailsDirtyText"><%= @selected_node&.dirty ? "yes" : "no" %></span>
+              </span>
             </div>
-            <div class="flex items-start gap-3">
-              <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">path</dt>
-              <dd class="text-[11px] text-gray-500 break-all font-mono leading-relaxed"><%= format_path(@selected_node.path) %></dd>
+            <div class="flex items-center gap-3">
+              <span class="text-[11px] font-mono">
+                <span class="text-gray-400">ahead</span>
+                <span class="text-emerald-600 ml-1" data-graph-keyboard-target="detailsAhead"><%= @selected_node&.ahead || 0 %></span>
+              </span>
+              <span class="text-[11px] font-mono">
+                <span class="text-gray-400">behind</span>
+                <span class="text-amber-600 ml-1" data-graph-keyboard-target="detailsBehind"><%= @selected_node&.behind || 0 %></span>
+              </span>
             </div>
-            <div class="flex items-start gap-3">
-              <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">HEAD</dt>
-              <dd class="text-[11px] text-gray-500 font-mono"><%= short_hash(@selected_node.head) %></dd>
-            </div>
-            <div class="flex items-center gap-4">
-              <div class="flex items-center gap-2">
-                <span class="text-[11px] text-gray-400 font-mono">dirty</span>
-                <% if @selected_node.dirty %>
-                  <span class="flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                    <span class="text-[11px] text-red-600 font-mono">yes</span>
-                  </span>
-                <% else %>
-                  <span class="flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span class="text-[11px] text-emerald-600 font-mono">no</span>
-                  </span>
-                <% end %>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="text-[11px] font-mono">
-                  <span class="text-gray-400">ahead</span>
-                  <span class="text-emerald-600 ml-1"><%= @selected_node.ahead %></span>
-                </span>
-                <span class="text-[11px] font-mono">
-                  <span class="text-gray-400">behind</span>
-                  <span class="text-amber-600 ml-1"><%= @selected_node.behind %></span>
-                </span>
-              </div>
-            </div>
-          </dl>
-        <% else %>
-          <p class="text-gray-400 text-[11px] font-mono italic">select a worktree node</p>
-        <% end %>
+          </div>
+        </dl>
       </div>
 
       <%# ─── Worktree List ─── %>
@@ -256,27 +250,25 @@
         <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">worktrees</h3>
         <div class="space-y-0.5">
           <% @worktrees.each do |wt| %>
-            <a href="<%= worktrees_path(selected: wt.id, repo: @selected_repo&.dig(:name)) %>"
-               class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150
-                      <%= wt.id == @selected_id ?
-                        'bg-blue-50 border border-blue-200' :
-                        'hover:bg-gray-100 border border-transparent' %>"
-               data-turbo-action="replace">
-              <span class="w-1.5 h-1.5 rounded-full shrink-0
-                           <%= wt.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"></span>
-              <span class="text-[11px] font-mono truncate
-                           <%= wt.id == @selected_id ? 'text-gray-800' : 'text-gray-500' %>">
-                <%= wt.branch %>
-              </span>
-              <span class="ml-auto flex items-center gap-1.5">
+            <button type="button"
+               class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 border border-transparent hover:bg-gray-100"
+               data-node-id="<%= wt.id %>"
+               data-action="click->graph-keyboard#selectFromList"
+               data-graph-keyboard-target="listItem">
+               <span class="w-1.5 h-1.5 rounded-full shrink-0
+                            <%= wt.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"></span>
+               <span class="text-[11px] font-mono truncate text-gray-500" data-node-branch-label>
+                 <%= wt.branch %>
+               </span>
+               <span class="ml-auto flex items-center gap-1.5">
                 <% if wt.ahead > 0 %>
                   <span class="text-[10px] text-emerald-600 font-mono">+<%= wt.ahead %></span>
                 <% end %>
                 <% if wt.behind > 0 %>
                   <span class="text-[10px] text-amber-600 font-mono">-<%= wt.behind %></span>
-                <% end %>
-              </span>
-            </a>
+                 <% end %>
+               </span>
+            </button>
           <% end %>
         </div>
       </div>
