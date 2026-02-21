@@ -176,7 +176,25 @@ export default class extends Controller {
   }
 
   async openTerminal(worktreeId) {
-    if (!worktreeId || !this.openUrlValue || !this.repoValue) return
+    if (!worktreeId) return
+
+    // Desktop mode: resolve path from DOM and open PTY directly (skip Rails PTY)
+    const isDesktop = typeof window.desktopShell?.terminal?.create === "function"
+    if (isDesktop) {
+      const node = this.nodeTargets.find((n) => n.dataset.nodeId === worktreeId)
+      const path = node?.dataset.path
+      if (!path) return
+
+      window.dispatchEvent(
+        new CustomEvent("worktree:open-terminal", {
+          detail: { path }
+        })
+      )
+      return
+    }
+
+    // Browser mode: hit Rails endpoint to spawn PTY via WebTerminalService
+    if (!this.openUrlValue || !this.repoValue) return
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")

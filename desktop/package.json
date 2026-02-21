@@ -6,10 +6,15 @@
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
+    "postinstall": "electron-rebuild",
     "build:mac": "electron-builder --mac dmg",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "node-pty": "^1.0.0"
+  },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "electron": "^30.5.1",
     "electron-builder": "^24.13.3"
   },
@@ -22,6 +27,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "terminal-manager.js",
       "package.json"
     ],
     "mac": {
