@@ -37,6 +37,11 @@ export default class extends Controller {
     createUrl: String,
     deleteUrl: String,
     openUrl: String,
+    fetchPullUrl: String,
+    rebaseUrl: String,
+    commitUrl: String,
+    pushUrl: String,
+    mergeUrl: String,
     repo: String
   }
 
@@ -113,6 +118,30 @@ export default class extends Controller {
       case "d":
         event.preventDefault()
         this.deleteSelected()
+        break
+      case "f":
+        if (!event.ctrlKey && !event.metaKey) {
+          event.preventDefault()
+          this.fetchPullSelected()
+        }
+        break
+      case "F":
+        if (!event.ctrlKey && !event.metaKey) {
+          event.preventDefault()
+          this.rebaseSelectedOntoParent()
+        }
+        break
+      case "c":
+        event.preventDefault()
+        this.commitSelected()
+        break
+      case "p":
+        event.preventDefault()
+        this.pushSelected()
+        break
+      case "m":
+        event.preventDefault()
+        this.mergeSelectedToParent()
         break
     }
   }
@@ -340,9 +369,7 @@ export default class extends Controller {
 
   openSelectedTerminal() {
     this.traceAction("open-terminal")
-    const selectedNode = this.nodeTargets.find(
-      (node) => node.dataset.nodeId === this.selectedValue
-    )
+    const selectedNode = this.selectedNodeTarget()
 
     if (!selectedNode) return
     debug("openSelectedTerminal -> opening selected node", { nodeId: selectedNode.dataset.nodeId })
@@ -351,12 +378,91 @@ export default class extends Controller {
 
   createFromSelected() {
     this.traceAction("open-create-dialog")
-    const selectedNode = this.nodeTargets.find(
-      (node) => node.dataset.nodeId === this.selectedValue
-    )
+    const selectedNode = this.selectedNodeTarget()
 
     if (!selectedNode) return
     this.openCreateDialog(selectedNode.dataset.nodeId, selectedNode.dataset.branch)
+  }
+
+  async fetchPullSelected() {
+    this.traceAction("fetch-pull")
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    await this.performNodeAction(
+      this.fetchPullUrlValue,
+      selectedNode.dataset.nodeId,
+      "Fetch/pull is not configured on this page"
+    )
+  }
+
+  async rebaseSelectedOntoParent() {
+    this.traceAction("rebase-onto-parent")
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    const parentBranch = selectedNode.dataset.parentBranch
+    if (!parentBranch) {
+      window.alert("Selected worktree has no parent branch")
+      return
+    }
+
+    await this.performNodeAction(
+      this.rebaseUrlValue,
+      selectedNode.dataset.nodeId,
+      "Rebase is not configured on this page"
+    )
+  }
+
+  async commitSelected() {
+    this.traceAction("commit-selected")
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    const message = window.prompt("Commit message")
+    if (message === null) return
+    const trimmed = message.trim()
+    if (!trimmed) {
+      window.alert("Commit message is required")
+      return
+    }
+
+    await this.performNodeAction(
+      this.commitUrlValue,
+      selectedNode.dataset.nodeId,
+      "Commit is not configured on this page",
+      { message: trimmed }
+    )
+  }
+
+  async pushSelected() {
+    this.traceAction("push-selected")
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    await this.performNodeAction(
+      this.pushUrlValue,
+      selectedNode.dataset.nodeId,
+      "Push is not configured on this page"
+    )
+  }
+
+  async mergeSelectedToParent() {
+    this.traceAction("merge-to-parent")
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    const parentBranch = selectedNode.dataset.parentBranch
+    if (!parentBranch) {
+      window.alert("Selected worktree has no parent branch")
+      return
+    }
+
+    await this.performNodeAction(
+      this.mergeUrlValue,
+      selectedNode.dataset.nodeId,
+      "Merge is not configured on this page"
+    )
   }
 
   createFromNode(event) {
@@ -457,12 +563,58 @@ export default class extends Controller {
 
   deleteSelected() {
     this.traceAction("open-delete-dialog")
-    const selectedNode = this.nodeTargets.find(
-      (node) => node.dataset.nodeId === this.selectedValue
-    )
+    const selectedNode = this.selectedNodeTarget()
 
     if (!selectedNode) return
     this.openDeleteDialog(selectedNode)
+  }
+
+  selectedNodeTarget() {
+    return this.nodeTargets.find(
+      (node) => node.dataset.nodeId === this.selectedValue
+    )
+  }
+
+  async performNodeAction(url, worktreeId, missingConfigMessage, extraPayload = {}) {
+    if (!url || !this.repoValue) {
+      window.alert(missingConfigMessage)
+      return
+    }
+    if (!worktreeId) return
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          worktree_id: worktreeId,
+          ...extraPayload
+        })
+      })
+
+      const payload = await this.parseJsonResponse(response)
+      if (!response.ok) {
+        window.alert(payload.error || payload.raw || "Action failed")
+        return
+      }
+
+      if (payload.redirect_url) {
+        Turbo.visit(payload.redirect_url, { action: "replace" })
+      } else {
+        this.refresh()
+      }
+    } catch (error) {
+      window.alert(error?.message || "Action failed")
+    }
   }
 
   openDeleteDialog(node) {

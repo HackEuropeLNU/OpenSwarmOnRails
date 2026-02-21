@@ -9,6 +9,11 @@ Rails.application.routes.draw do
       post :create_worktree
       post :delete_worktree
       post :open_terminal
+      post :fetch_pull_parent
+      post :rebase_onto_parent
+      post :commit_selected
+      post :push_selected
+      post :merge_to_parent
     end
   end
 
