@@ -6,6 +6,7 @@ Rails.application.routes.draw do
     collection do
       post :refresh
       post :create_worktree
+      post :open_terminal
     end
   end
 
