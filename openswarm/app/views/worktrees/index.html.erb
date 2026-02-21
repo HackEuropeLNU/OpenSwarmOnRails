@@ -5,7 +5,8 @@
      data-theme-target="root"
      data-graph-keyboard-selected-value="<%= @selected_id %>"
      data-graph-keyboard-repo-value="<%= @selected_repo&.dig(:name) %>"
-     data-graph-keyboard-create-url-value="<%= create_worktree_worktrees_path %>">
+     data-graph-keyboard-create-url-value="<%= create_worktree_worktrees_path %>"
+     data-graph-keyboard-open-url-value="<%= open_terminal_worktrees_path %>">
 
   <%# ═══ Top Bar ═══ %>
   <header class="flex items-center justify-between px-5 py-2.5 border-b border-gray-200 bg-white shrink-0 z-10">
@@ -87,6 +88,7 @@
                     class="w-full cursor-pointer transition-all duration-200 ease-out focus:outline-none"
                     data-action="click->graph-keyboard#selectNode"
                     data-node-id="<%= wt.id %>"
+                    title="Open terminal in this worktree"
                     data-graph-keyboard-target="node">
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
                         bg-[#111827]/90 backdrop-blur-sm

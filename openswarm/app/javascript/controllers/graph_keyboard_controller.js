@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // Handles keyboard navigation and node selection for the worktree graph.
 export default class extends Controller {
   static targets = ["canvas", "node", "details"]
-  static values = { selected: String, createUrl: String, repo: String }
+  static values = { selected: String, createUrl: String, openUrl: String, repo: String }
 
   connect() {
     this.boundKeydown = this.handleKeydown.bind(this)
@@ -39,6 +39,10 @@ export default class extends Controller {
         event.preventDefault()
         this.createFromSelected()
         break
+      case "o":
+        event.preventDefault()
+        this.openSelectedTerminal()
+        break
     }
   }
 
@@ -60,10 +64,14 @@ export default class extends Controller {
     }
   }
 
-  selectNode(event) {
+  async selectNode(event) {
     const button = event.currentTarget
     const nodeId = button.dataset.nodeId
-    if (nodeId && nodeId !== this.selectedValue) {
+    if (!nodeId) return
+
+    await this.openTerminal(nodeId)
+
+    if (nodeId !== this.selectedValue) {
       this.navigateToNode(nodeId)
     }
   }
@@ -88,6 +96,15 @@ export default class extends Controller {
 
   refresh() {
     Turbo.visit(window.location.href, { action: "replace" })
+  }
+
+  openSelectedTerminal() {
+    const selectedNode = this.nodeTargets.find(
+      (node) => node.dataset.nodeId === this.selectedValue
+    )
+
+    if (!selectedNode) return
+    this.openTerminal(selectedNode.dataset.nodeId)
   }
 
   createFromSelected() {
@@ -147,6 +164,36 @@ export default class extends Controller {
       window.alert("Failed to create worktree")
     } finally {
       button.disabled = false
+    }
+  }
+
+  async openTerminal(worktreeId) {
+    if (!worktreeId || !this.openUrlValue || !this.repoValue) return
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(this.openUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          worktree_id: worktreeId
+        })
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        window.alert(payload.error || "Failed to open terminal")
+      }
+    } catch (_error) {
+      window.alert("Failed to open terminal")
     }
   }
 }

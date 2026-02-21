@@ -70,6 +70,34 @@ class WorktreesController < ApplicationController
     }
   end
 
+  def open_terminal
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+
+    repos = discover_repos
+    selected_repo = repos.find { |r| r[:name] == repo_name }
+    return render json: { error: "Repository not found" }, status: :not_found unless selected_repo
+
+    discovery = GitWorktreeService.discover(selected_repo[:root])
+    unless discovery.success
+      return render json: { error: discovery.error }, status: :unprocessable_entity
+    end
+
+    worktree = discovery.data[:worktrees].find { |wt| wt.id == worktree_id }
+    return render json: { error: "Worktree not found" }, status: :unprocessable_entity unless worktree
+
+    result = LocalTerminalService.open(worktree.path)
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      path: worktree.path,
+      app: result.data[:app]
+    }
+  end
+
   private
 
   def discover_repos
