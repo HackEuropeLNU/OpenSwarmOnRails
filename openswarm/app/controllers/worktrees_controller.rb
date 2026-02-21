@@ -62,6 +62,9 @@ class WorktreesController < ApplicationController
       branch: result.data[:branch],
       redirect_url: worktrees_path(repo: repo_name, selected: result.data[:id])
     }
+  rescue => e
+    Rails.logger.error("[create_worktree] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error creating worktree: #{e.message}" }, status: :internal_server_error
   end
 
   def open_terminal

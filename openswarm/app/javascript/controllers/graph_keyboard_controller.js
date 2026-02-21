@@ -129,6 +129,9 @@ export default class extends Controller {
   }
 
   async createFromNode(event) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+
     const button = event.currentTarget
     const parentId = button.dataset.parentId
     const parentBranch = button.dataset.parentBranch || "this branch"
@@ -138,7 +141,15 @@ export default class extends Controller {
 
     const trimmedName = name.trim()
     if (!trimmedName) return
-    if (!this.createUrlValue || !this.repoValue || !parentId) return
+    if (!this.createUrlValue || !this.repoValue || !parentId) {
+      console.error("Missing create-worktree params", {
+        createUrl: this.createUrlValue,
+        repo: this.repoValue,
+        parentId
+      })
+      window.alert("Worktree creation is not configured on this page")
+      return
+    }
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
@@ -161,17 +172,41 @@ export default class extends Controller {
         })
       })
 
-      const payload = await response.json()
+      const payload = await this.parseJsonResponse(response)
       if (!response.ok) {
-        window.alert(payload.error || "Failed to create worktree")
+        const message = payload.error || payload.raw || `Failed to create worktree (${response.status})`
+        console.error("Worktree create request failed", {
+          status: response.status,
+          statusText: response.statusText,
+          payload
+        })
+        window.alert(message)
+        return
+      }
+
+      if (!payload.redirect_url) {
+        console.error("Worktree create missing redirect_url", payload)
+        window.alert("Worktree created but response was incomplete")
         return
       }
 
       Turbo.visit(payload.redirect_url, { action: "replace" })
-    } catch (_error) {
-      window.alert("Failed to create worktree")
+    } catch (error) {
+      console.error("Worktree create request threw", error)
+      window.alert(error?.message || "Failed to create worktree")
     } finally {
       button.disabled = false
+    }
+  }
+
+  async parseJsonResponse(response) {
+    const raw = await response.text()
+    if (!raw) return {}
+
+    try {
+      return JSON.parse(raw)
+    } catch (_error) {
+      return { raw }
     }
   }
 
