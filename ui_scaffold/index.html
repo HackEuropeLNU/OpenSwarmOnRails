@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,87 +17,61 @@
           extend: {
             fontFamily: {
               mono: ['"JetBrains Mono"', "monospace"],
-              display: ["Sora", "sans-serif"],
+              display: ["Inter", "sans-serif"],
             },
           },
         },
       };
     </script>
+    <style>
+      .bg-grid {
+        background-image: radial-gradient(circle, rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+    </style>
   </head>
-  <body>
-    <div
-      id="app"
-      class="relative min-h-screen overflow-hidden font-mono transition-colors duration-300"
-      :class="theme === 'dark' ? 'text-[#e2e7ff]' : 'text-[#1a2432]'"
-      :style="backgroundStyle"
-    >
-      <div v-if="bgMode === 'stars'" class="pointer-events-none absolute inset-0">
-        <span
-          v-for="star in stars"
-          :key="star.id"
-          class="absolute rounded-full bg-white"
-          :class="star.size === 1 ? 'h-[2px] w-[2px]' : 'h-[3px] w-[3px]'"
-          :style="{ left: star.x + '%', top: star.y + '%', opacity: star.opacity }"
-        ></span>
-      </div>
+  <body class="bg-white text-gray-800 font-mono antialiased">
+    <div id="app" class="relative min-h-screen overflow-hidden">
 
       <main class="grid min-h-screen grid-cols-1 lg:grid-cols-[minmax(580px,1fr)_360px]">
         <section class="p-3">
-          <header class="mb-2 flex flex-col gap-2 font-display text-sm sm:flex-row sm:items-center sm:justify-between sm:text-base">
-            <p>
-              worktree graph
-              <span class="opacity-90">bg:{{ bgMode }}</span>
-            </p>
+          <header class="mb-2 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-2 h-2 rounded-full bg-blue-600"></div>
+              <p class="font-semibold text-gray-800">
+                <span class="text-blue-600">open</span><span class="text-gray-600">swarm</span>
+              </p>
+            </div>
             <div class="flex gap-2">
               <button
                 type="button"
                 @click="connectProject"
                 :disabled="isConnectingProject"
-                class="rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-60"
-                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
+                class="rounded border border-gray-200 px-2 py-1 text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 transition-all"
               >
                 {{ isConnectingProject ? "connecting..." : "connect project" }}
-              </button>
-              <button
-                type="button"
-                @click="toggleTheme"
-                class="rounded border px-2 py-1"
-                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
-              >
-                theme
-              </button>
-              <button
-                type="button"
-                @click="cycleBackground"
-                class="rounded border px-2 py-1"
-                :class="theme === 'dark' ? 'border-[#6076ab] text-[#91b7ff]' : 'border-[#8c96a8] text-[#4e5868]'"
-              >
-                ctrl+b bg
               </button>
             </div>
           </header>
 
           <p
             v-if="connectedProject"
-            class="mb-2 text-xs sm:text-sm"
-            :class="theme === 'dark' ? 'text-[#9ed8ad]' : 'text-[#2f6a3f]'"
+            class="mb-2 text-xs sm:text-sm text-emerald-600"
           >
             Connected: <strong>{{ connectedProject.name }}</strong> (<strong>{{ connectedProject.worktreeCount }}</strong> worktrees)
           </p>
 
           <p
             v-if="connectError"
-            class="mb-2 text-xs sm:text-sm"
-            :class="theme === 'dark' ? 'text-[#f6a0a0]' : 'text-[#8b2f2f]'"
+            class="mb-2 text-xs sm:text-sm text-red-600"
           >
             {{ connectError }}
           </p>
 
           <div
-            class="relative min-h-[640px] overflow-auto border-2"
+            class="relative min-h-[640px] overflow-auto border border-gray-200 bg-white bg-grid rounded-lg"
             tabindex="0"
             @keydown="onCanvasKeydown"
-            :class="theme === 'dark' ? 'border-[#3d7ff6] bg-[#161d33]/40' : 'border-[#9aa3b3] bg-white/60'"
           >
             <svg v-if="hasNodes" viewBox="0 0 1000 660" class="block h-[660px] w-full" aria-hidden="true">
               <path
@@ -105,17 +79,17 @@
                 :key="index"
                 :d="link"
                 fill="none"
-                stroke-width="2"
-                :stroke="theme === 'dark' ? '#4f8ef9' : '#8ab2ff'"
+                stroke-width="1.5"
+                stroke="#93c5fd"
+                stroke-linecap="round"
               ></path>
             </svg>
 
             <p
               v-else
-              class="absolute left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-6 text-center text-sm"
-              :class="theme === 'dark' ? 'text-[#aeb7cf]' : 'text-[#5f6f84]'"
+              class="absolute left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-6 text-center text-sm text-gray-400"
             >
-              No graph data loaded. Set <code>window.OPENSWARM_GRAPH_DATA</code> before app init to render live worktrees.
+              No graph data loaded. Set <code class="bg-gray-100 px-1 rounded">window.OPENSWARM_GRAPH_DATA</code> before app init to render live worktrees.
             </p>
 
             <button
@@ -126,57 +100,65 @@
               type="button"
               @click="setSelected(node.id)"
             >
-              <strong>{{ node.branch }}</strong>
-              <small>{{ node.state }}</small>
+              <div class="flex items-center justify-between gap-2">
+                <strong class="text-[12px] font-medium truncate">{{ node.branch }}</strong>
+                <span v-if="node.root" class="text-[9px] text-amber-600">root</span>
+                <span v-if="node.dirty" class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+              </div>
+              <div class="flex items-center gap-2 mt-1.5">
+                <small class="text-[10px] px-1.5 py-0.5 rounded-md border bg-gray-50 text-gray-600 border-gray-200">{{ node.state }}</small>
+                <small v-if="node.ahead > 0" class="text-[10px] text-emerald-600">+{{ node.ahead }}</small>
+                <small v-if="node.behind > 0" class="text-[10px] text-amber-600">-{{ node.behind }}</small>
+              </div>
             </button>
           </div>
         </section>
 
-        <aside
-          class="flex flex-col gap-2 border-t p-3 lg:border-l lg:border-t-0"
-          :class="theme === 'dark' ? 'border-[#4f5470] bg-[#1a1d2f]/80' : 'border-[#c8d0db] bg-[#eceef2]'"
-        >
-          <section class="border p-2" :class="cardClass">
-            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">project</h3>
+        <aside class="flex flex-col gap-2 border-t p-3 lg:border-l lg:border-t-0 border-gray-200 bg-gray-50">
+          <section class="border border-gray-200 bg-white rounded-lg p-3">
+            <h3 class="mb-2 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">project</h3>
             <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
-              <span>name:</span> <strong>{{ connectedProject.name }}</strong>
+              <span class="text-gray-400">name:</span> <strong class="text-gray-800">{{ connectedProject.name }}</strong>
             </p>
             <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
-              <span>git:</span> <strong>{{ connectedProject.gitDirectoryName }}</strong>
+              <span class="text-gray-400">git:</span> <strong class="text-gray-800">{{ connectedProject.gitDirectoryName }}</strong>
             </p>
             <p v-if="connectedProject" class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
-              <span>worktrees:</span> <strong>{{ connectedProject.worktreeCount }}</strong>
+              <span class="text-gray-400">worktrees:</span> <strong class="text-gray-800">{{ connectedProject.worktreeCount }}</strong>
             </p>
-            <p v-if="!connectedProject" class="mb-1 text-xs sm:text-sm">
-              Connect a repository root folder that contains <code>.git</code>.
+            <p v-if="!connectedProject" class="mb-1 text-xs sm:text-sm text-gray-400">
+              Connect a repository root folder that contains <code class="bg-gray-100 px-1 rounded">.git</code>.
             </p>
           </section>
 
-          <section class="border p-2" :class="cardClass">
-            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">workspace stats</h3>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>total:</span> <strong>{{ nodeStats.total }}</strong></p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>dirty:</span> <strong>{{ nodeStats.dirty }}</strong></p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>ahead:</span> <strong>{{ nodeStats.ahead }}</strong></p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>behind:</span> <strong>{{ nodeStats.behind }}</strong></p>
+          <section class="border border-gray-200 bg-white rounded-lg p-3">
+            <h3 class="mb-2 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">workspace stats</h3>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">total:</span> <strong class="text-gray-800">{{ nodeStats.total }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">dirty:</span> <strong class="text-red-500">{{ nodeStats.dirty }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">ahead:</span> <strong class="text-emerald-600">{{ nodeStats.ahead }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">behind:</span> <strong class="text-amber-600">{{ nodeStats.behind }}</strong></p>
           </section>
 
-          <section v-if="selectedNode" class="border p-2" :class="cardClass">
-            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">details</h3>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>branch:</span> <strong>{{ selectedNode.branch }}</strong></p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>path:</span> <strong>{{ selectedNode.path }}</strong></p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>dirty:</span> <strong>{{ selectedNode.dirty ? "yes" : "no" }}</strong></p>
+          <section v-if="selectedNode" class="border border-gray-200 bg-white rounded-lg p-3">
+            <h3 class="mb-2 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">details</h3>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">branch:</span> <strong class="text-gray-800">{{ selectedNode.branch }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">path:</span> <strong class="text-gray-600">{{ selectedNode.path }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">dirty:</span> <strong :class="selectedNode.dirty ? 'text-red-500' : 'text-emerald-600'">{{ selectedNode.dirty ? "yes" : "no" }}</strong></p>
             <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm">
-              <span>ahead:</span> <strong>{{ selectedNode.ahead }}</strong>
-              <span>behind:</span> <strong>{{ selectedNode.behind }}</strong>
+              <span class="text-gray-400">ahead:</span> <strong class="text-emerald-600">{{ selectedNode.ahead }}</strong>
+              <span class="text-gray-400">behind:</span> <strong class="text-amber-600">{{ selectedNode.behind }}</strong>
             </p>
-            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>parent:</span> <strong>{{ selectedNode.parentId || "none" }}</strong></p>
-            <p class="mt-2 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span>status:</span> <strong>{{ selectedNode.state }}</strong></p>
+            <p class="mb-1 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">parent:</span> <strong class="text-gray-600">{{ selectedNode.parentId || "none" }}</strong></p>
+            <p class="mt-2 flex flex-wrap items-baseline gap-2 text-xs sm:text-sm"><span class="text-gray-400">status:</span> <strong class="text-gray-800">{{ selectedNode.state }}</strong></p>
           </section>
 
-          <section class="border p-2" :class="cardClass">
-            <h3 class="mb-2 text-sm" :class="theme === 'dark' ? 'text-[#adb7ce]' : 'text-[#607084]'">actions</h3>
+          <section class="border border-gray-200 bg-white rounded-lg p-3">
+            <h3 class="mb-2 text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">actions</h3>
             <ul class="space-y-1 text-xs sm:text-sm">
-              <li v-for="action in actions" :key="action.key + action.label"><b>{{ action.key }}</b> {{ action.label }}</li>
+              <li v-for="action in actions" :key="action.key + action.label" class="flex items-center gap-2.5 py-0.5">
+                <kbd class="text-[10px] font-mono w-[18px] h-[18px] flex items-center justify-center rounded bg-gray-100 border border-gray-200 text-gray-500 shrink-0">{{ action.key }}</kbd>
+                <span class="text-gray-500">{{ action.label }}</span>
+              </li>
             </ul>
           </section>
         </aside>
