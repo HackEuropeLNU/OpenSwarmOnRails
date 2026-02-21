@@ -1,24 +1,40 @@
-# README
+# OpenSwarm Rails App
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+This directory contains the Rails application that powers OpenSwarm.
 
-Things you may want to cover:
+For workspace-level commands and Electron packaging, see the repository root README: `../README.md`.
 
-* Ruby version
+## Requirements
 
-* System dependencies
+- Ruby `3.3.10`
+- Bundler
+- Node.js and npm
 
-* Configuration
+## Setup
 
-* Database creation
+```bash
+bin/setup --skip-server
+```
 
-* Database initialization
+This installs gems, prepares the database, and clears stale logs/temp files.
 
-* How to run the test suite
+## Run in development
 
-* Services (job queues, cache servers, search engines, etc.)
+From the repository root, prefer:
 
-* Deployment instructions
+```bash
+make dev-backend
+```
 
-* ...
+Or from this directory:
+
+```bash
+bin/dev
+```
+
+## Useful commands
+
+- `bin/rails test` - run tests
+- `bin/rubocop` - run linting
+- `bin/brakeman` - run security checks
+- `bin/rails db:prepare` - create/migrate database
