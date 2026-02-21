@@ -15,6 +15,7 @@ const isDesktop = typeof desktopTerminal?.create === "function"
 
 // ── Flow control: batch ack every N chars ──
 const ACK_BATCH_SIZE = 5000
+const DEFERRED_OUTPUT_LIMIT = 200000
 const OPENCODE_SPINNER_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/
 const OPENCODE_IDLE_TIMEOUT_MS = 1500
 const SHELL_PROMPT_REGEX = /(?:\r?\n|^)[^\r\n]*[%$#] $/
@@ -68,6 +69,7 @@ export default class extends Controller {
     this.sessionMetaById = new Map()
     this.pendingSessionMeta = null
     this.resizeObserver = null
+    this.deferredOutput = ""
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -101,6 +103,8 @@ export default class extends Controller {
         }
 
         if (!this.term) {
+          this.queueDeferredOutput(data)
+          this.processTerminalOutput(data, sessionId)
           desktopTerminal.ack(sessionId, data.length)
           return
         }
@@ -180,11 +184,11 @@ export default class extends Controller {
 
   showPanel() {
     debug("showPanel")
-    this.panelTarget.classList.remove("terminal-panel-hidden")
-    this.panelTarget.classList.add("terminal-panel-visible")
+    this.panelTarget.classList.remove("hidden")
     this.panelVisible = true
     document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
+    this.ensureTerminalReady()
 
     requestAnimationFrame(() => {
       this.resizeTerminal()
@@ -198,11 +202,29 @@ export default class extends Controller {
 
   hidePanel() {
     debug("hidePanel")
-    this.panelTarget.classList.remove("terminal-panel-visible")
-    this.panelTarget.classList.add("terminal-panel-hidden")
+    this.panelTarget.classList.add("hidden")
     this.panelVisible = false
     document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
+
+    if (this.term) {
+      this.term.dispose()
+      this.term = null
+      this.fitAddon = null
+      this.terminalTarget.innerHTML = ""
+    }
+  }
+
+  ensureTerminalReady() {
+    if (this.term) return
+
+    this.setupTerminal()
+    if (isDesktop) {
+      this.attachDesktopTerminalHandlers()
+    } else if (this.subscription) {
+      this.attachBrowserTerminalHandlers()
+    }
+    this.flushDeferredOutput()
   }
 
   togglePanel() {
@@ -270,8 +292,6 @@ export default class extends Controller {
       this.shellTarget.textContent = existingSession.shell || ""
       this.statusTarget.textContent = "connected"
       this.showPanel()
-      this.setupTerminal()
-      this.attachDesktopTerminalHandlers()
       this.term.focus()
       this.resizeTerminal()
       this.updateBackgroundIndicator()
@@ -286,7 +306,6 @@ export default class extends Controller {
     this.statusTarget.textContent = "creating"
 
     this.showPanel()
-    this.setupTerminal()
 
     const cols = this.term?.cols || 80
     const rows = this.term?.rows || 24
@@ -311,8 +330,6 @@ export default class extends Controller {
       this.statusTarget.textContent = "connected"
       this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
       this.desktopPathBySessionId.set(result.sessionId, path)
-
-      this.attachDesktopTerminalHandlers()
 
       this.term.focus()
       this.resizeTerminal()
@@ -391,7 +408,6 @@ export default class extends Controller {
     this.sessionMetaById.set(payload.session_id, this.pendingSessionMeta)
 
     this.showPanel()
-    this.setupTerminal()
     this.connectSubscription(payload.session_id)
     this.updateBackgroundIndicator()
   }
@@ -479,19 +495,25 @@ export default class extends Controller {
           this.statusTarget.textContent = "rejected"
         },
         received: (message) => {
-          if (!this.term) return
-
           if (message.type === "output") {
             if (message.encoding === "base64") {
               const bytes = this.decodeBase64(message.data || "")
               const text = this.textDecoder.decode(bytes)
               this.recordOutputActivity(text, this.sessionId)
-              this.term.write(bytes)
+              if (this.term) {
+                this.term.write(bytes)
+              } else {
+                this.queueDeferredOutput(text)
+              }
               this.processTerminalOutput(text, this.sessionId)
             } else {
               const text = message.data || ""
               this.recordOutputActivity(text, this.sessionId)
-              this.term.write(text)
+              if (this.term) {
+                this.term.write(text)
+              } else {
+                this.queueDeferredOutput(text)
+              }
               this.processTerminalOutput(text, this.sessionId)
             }
           } else if (message.type === "closed") {
@@ -505,7 +527,12 @@ export default class extends Controller {
       }
     )
 
-    // Wire input for browser mode
+    this.attachBrowserTerminalHandlers()
+  }
+
+  attachBrowserTerminalHandlers() {
+    if (!this.term) return
+
     this.term.onData((data) => {
       if (!this.subscription) return
       this.trackInputForOpencode(data, this.sessionId)
@@ -516,6 +543,17 @@ export default class extends Controller {
       if (!this.subscription) return
       this.subscription.perform("resize", { cols, rows })
     })
+  }
+
+  queueDeferredOutput(chunk) {
+    if (!chunk) return
+    this.deferredOutput = `${this.deferredOutput}${chunk}`.slice(-DEFERRED_OUTPUT_LIMIT)
+  }
+
+  flushDeferredOutput() {
+    if (!this.term || !this.deferredOutput) return
+    this.term.write(this.deferredOutput)
+    this.deferredOutput = ""
   }
 
   resizeTerminal() {
@@ -565,6 +603,7 @@ export default class extends Controller {
     this.pendingDesktopSessionId = null
     this.pendingSessionMeta = null
     this.outputParseCarry = ""
+    this.deferredOutput = ""
     if (!this.panelVisible) {
       document.documentElement.classList.remove("overflow-hidden")
     }

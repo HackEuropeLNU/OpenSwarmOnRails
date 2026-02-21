@@ -140,13 +140,3 @@ button:focus-visible {
   border: 0;
   outline: 0;
 }
-
-.terminal-panel-hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.terminal-panel-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
