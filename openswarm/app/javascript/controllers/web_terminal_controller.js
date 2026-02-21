@@ -706,8 +706,6 @@ export default class extends Controller {
   traceActionClick(event) {
     const message = event?.detail?.message || "click (unknown-action)"
     console.log(TAG, message)
-    if (!this.term) return
-    this.term.writeln(`\r\n${message}`)
   }
 
   trackInputForOpencode(data, sessionId = this.sessionId) {
