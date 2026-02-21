@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 import { Terminal } from "xterm"
 import { FitAddon } from "@xterm/addon-fit"
-import consumer from "../cable_consumer"
+import consumer from "cable_consumer"
 
 const TAG = "[DEBUG:web_terminal]"
 
