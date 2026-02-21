@@ -433,4 +433,13 @@
       </div>
     </div>
   </div>
+
+  <button type="button"
+          class="hidden fixed right-4 bottom-4 z-[58] px-3 py-1.5 rounded-full border border-slate-600 bg-slate-900/95 text-slate-200 text-[11px] font-mono shadow-lg shadow-slate-900/60 hover:border-slate-500 hover:text-white transition-colors"
+          title="Terminal is running in the background"
+          data-web-terminal-target="backgroundIndicator"
+          data-action="click->web-terminal#reopenFromIndicator">
+    <span class="mr-1.5 text-sky-300" data-web-terminal-target="backgroundSpinner">⠿</span>
+    <span data-web-terminal-target="backgroundLabel">terminal idle</span>
+  </button>
 </div>
