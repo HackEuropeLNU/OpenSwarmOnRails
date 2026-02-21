@@ -151,6 +151,193 @@ class GitWorktreeService
       Result.new(success: false, error: "#{e.class}: #{e.message}")
     end
 
+    def fetch_pull_parent(repo_root:, worktree_path:)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+      return Result.new(success: false, error: "Worktree path does not exist: #{worktree_path}") unless File.directory?(worktree_path)
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+
+      fetch_out, fetch_err, fetch_status = git_capture3(worktree_path, "fetch", "--all", "--prune")
+      unless fetch_status.success?
+        return Result.new(success: false, error: command_error(fetch_out, fetch_err, "Failed to fetch remotes"))
+      end
+
+      current_branch = git(worktree_path, "rev-parse", "--abbrev-ref", "HEAD")&.strip
+      if current_branch.to_s.empty? || current_branch == "HEAD"
+        return Result.new(success: false, error: "Cannot pull while HEAD is detached")
+      end
+
+      upstream = git(worktree_path, "rev-parse", "--abbrev-ref", "#{current_branch}@{upstream}")&.strip
+      if upstream.to_s.empty?
+        return Result.new(success: false, error: "No upstream configured for #{current_branch}. Push with -u first.")
+      end
+
+      pull_out, pull_err, pull_status = git_capture3(worktree_path, "pull", "--ff-only")
+      unless pull_status.success?
+        return Result.new(success: false, error: command_error(pull_out, pull_err, "Failed to pull latest changes"))
+      end
+
+      invalidate_discovery_cache!(main_root)
+
+      output = [fetch_out, fetch_err, pull_out, pull_err].map(&:to_s).join("\n").strip
+      Result.new(success: true, data: { output: output })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
+    def rebase_onto_parent(repo_root:, worktree_path:, parent_branch:)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+      return Result.new(success: false, error: "Worktree path does not exist: #{worktree_path}") unless File.directory?(worktree_path)
+      parent = parent_branch.to_s.strip
+      return Result.new(success: false, error: "Parent branch is required") if parent.empty?
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+
+      fetch_out, fetch_err, fetch_status = git_capture3(worktree_path, "fetch", "--all", "--prune")
+      unless fetch_status.success?
+        return Result.new(success: false, error: command_error(fetch_out, fetch_err, "Failed to fetch remotes"))
+      end
+
+      rebase_out, rebase_err, rebase_status = git_capture3(worktree_path, "rebase", parent)
+      unless rebase_status.success?
+        return Result.new(success: false, error: command_error(rebase_out, rebase_err, "Failed to rebase onto #{parent}"))
+      end
+
+      invalidate_discovery_cache!(main_root)
+
+      output = [fetch_out, fetch_err, rebase_out, rebase_err].map(&:to_s).join("\n").strip
+      Result.new(success: true, data: { output: output })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
+    def commit_selected(repo_root:, worktree_path:, message:)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+      return Result.new(success: false, error: "Worktree path does not exist: #{worktree_path}") unless File.directory?(worktree_path)
+
+      commit_message = message.to_s.strip
+      return Result.new(success: false, error: "Commit message is required") if commit_message.empty?
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+
+      add_out, add_err, add_status = git_capture3(worktree_path, "add", "-A")
+      unless add_status.success?
+        return Result.new(success: false, error: command_error(add_out, add_err, "Failed to stage changes"))
+      end
+
+      commit_out, commit_err, commit_status = git_capture3(worktree_path, "commit", "-m", commit_message)
+      unless commit_status.success?
+        error_text = command_error(commit_out, commit_err, "Failed to commit changes")
+        if error_text.include?("nothing to commit")
+          error_text = "Nothing to commit in selected worktree"
+        end
+        return Result.new(success: false, error: error_text)
+      end
+
+      invalidate_discovery_cache!(main_root)
+
+      output = [add_out, add_err, commit_out, commit_err].map(&:to_s).join("\n").strip
+      Result.new(success: true, data: { output: output })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
+    def push_selected(repo_root:, worktree_path:)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+      return Result.new(success: false, error: "Worktree path does not exist: #{worktree_path}") unless File.directory?(worktree_path)
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+
+      current_branch = git(worktree_path, "rev-parse", "--abbrev-ref", "HEAD")&.strip
+      if current_branch.to_s.empty? || current_branch == "HEAD"
+        return Result.new(success: false, error: "Cannot push while HEAD is detached")
+      end
+
+      upstream = git(worktree_path, "rev-parse", "--abbrev-ref", "#{current_branch}@{upstream}")&.strip
+      args = if upstream.to_s.empty?
+        remote = git(worktree_path, "config", "branch.#{current_branch}.remote")&.strip
+        remote = "origin" if remote.to_s.empty?
+        ["push", "-u", remote, current_branch]
+      else
+        ["push"]
+      end
+
+      push_out, push_err, push_status = git_capture3(worktree_path, *args)
+      unless push_status.success?
+        return Result.new(success: false, error: command_error(push_out, push_err, "Failed to push selected worktree"))
+      end
+
+      invalidate_discovery_cache!(main_root)
+
+      output = [push_out, push_err].map(&:to_s).join("\n").strip
+      Result.new(success: true, data: { output: output })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
+    def merge_to_parent(repo_root:, worktree_path:, parent_branch:)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+      return Result.new(success: false, error: "Worktree path does not exist: #{worktree_path}") unless File.directory?(worktree_path)
+      parent = parent_branch.to_s.strip
+      return Result.new(success: false, error: "Parent branch is required") if parent.empty?
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+      discovery = discover(main_root)
+      return Result.new(success: false, error: discovery.error) unless discovery.success
+
+      expanded_selected = File.expand_path(worktree_path)
+      selected = discovery.data[:worktrees].find { |wt| File.expand_path(wt.path) == expanded_selected }
+      return Result.new(success: false, error: "Selected worktree not found") unless selected
+
+      selected_branch = selected.branch.to_s.strip
+      if selected_branch.empty? || selected.detached || selected_branch == "(detached)"
+        return Result.new(success: false, error: "Cannot merge detached worktree into parent")
+      end
+
+      if selected_branch == parent
+        return Result.new(success: false, error: "Selected branch already matches parent branch")
+      end
+
+      parent_worktree = discovery.data[:worktrees].find do |wt|
+        !wt.detached && wt.branch.to_s == parent
+      end
+      unless parent_worktree
+        return Result.new(success: false, error: "Parent branch #{parent} has no active worktree")
+      end
+
+      active_parent_branch = git(parent_worktree.path, "rev-parse", "--abbrev-ref", "HEAD")&.strip
+      if active_parent_branch != parent
+        return Result.new(success: false, error: "Parent worktree is not checked out on #{parent}")
+      end
+
+      merge_out, merge_err, merge_status = git_capture3(parent_worktree.path, "merge", "--no-ff", selected_branch)
+      unless merge_status.success?
+        return Result.new(success: false, error: command_error(merge_out, merge_err, "Failed to merge #{selected_branch} into #{parent}"))
+      end
+
+      invalidate_discovery_cache!(main_root)
+
+      output = [merge_out, merge_err].map(&:to_s).join("\n").strip
+      Result.new(success: true, data: { output: output, parent_id: parent_worktree.id })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
     # Scan known workspace patterns to find repo roots automatically.
     # Returns array of repo root paths.
     def scan_workspaces(*roots)
@@ -183,6 +370,13 @@ class GitWorktreeService
     def git_capture3(working_dir, *args)
       require "open3"
       Open3.capture3("git", *args, chdir: working_dir)
+    end
+
+    def command_error(stdout, stderr, fallback)
+      message = stderr.to_s.strip
+      message = stdout.to_s.strip if message.empty?
+      message = fallback if message.empty?
+      message
     end
 
     def cached_discovery(repo_root)
