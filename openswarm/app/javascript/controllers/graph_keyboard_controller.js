@@ -34,6 +34,7 @@ export default class extends Controller {
 
   static values = {
     selected: String,
+    openProjectUrl: String,
     createUrl: String,
     deleteUrl: String,
     openUrl: String,
@@ -219,6 +220,58 @@ export default class extends Controller {
   refresh() {
     this.traceAction("refresh")
     Turbo.visit(window.location.href, { action: "replace" })
+  }
+
+  async openProjectPicker() {
+    this.traceAction("open-project")
+
+    if (!this.openProjectUrlValue) {
+      window.alert("Open project is not configured on this page")
+      return
+    }
+
+    const pickGitRepo = window.desktopShell?.pickGitRepo
+    if (typeof pickGitRepo !== "function") {
+      window.alert("Open project picker is available in the desktop app")
+      return
+    }
+
+    const selection = await pickGitRepo()
+    if (selection?.error) {
+      window.alert(selection.error)
+      return
+    }
+    if (!selection?.path) return
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(this.openProjectUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({ repo_root: selection.path })
+      })
+
+      const payload = await this.parseJsonResponse(response)
+      if (!response.ok) {
+        window.alert(payload.error || payload.raw || "Failed to open project")
+        return
+      }
+
+      if (payload.redirect_url) {
+        Turbo.visit(payload.redirect_url, { action: "replace" })
+      } else {
+        this.refresh()
+      }
+    } catch (error) {
+      window.alert(error?.message || "Failed to open project")
+    }
   }
 
   openSelectedTerminal() {

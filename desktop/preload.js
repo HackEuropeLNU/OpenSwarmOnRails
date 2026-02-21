@@ -10,6 +10,7 @@ debug("preload script initialized");
 
 contextBridge.exposeInMainWorld("desktopShell", {
   platform: process.platform,
+  pickGitRepo: () => ipcRenderer.invoke("dialog:pick-git-repo"),
 
   // ── Terminal API (node-pty via Electron main process) ──
   terminal: {
