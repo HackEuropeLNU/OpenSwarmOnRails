@@ -70,10 +70,6 @@ export default class extends Controller {
     if (!nodeId) return
 
     await this.openTerminal(nodeId)
-
-    if (nodeId !== this.selectedValue) {
-      this.navigateToNode(nodeId)
-    }
   }
 
   navigateToNode(nodeId) {
