@@ -59,6 +59,17 @@
     <main class="flex-1 relative overflow-auto bg-white" id="graph-canvas"
           data-graph-keyboard-target="canvas">
 
+      <section class="absolute top-4 right-4 z-20 w-[300px] rounded-xl border border-slate-700/70 bg-slate-950/90 backdrop-blur-sm shadow-xl shadow-slate-900/55 p-3 pointer-events-none">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-[10px] uppercase tracking-[0.15em] text-slate-300 font-mono">token legend</h3>
+          <span class="text-[9px] text-slate-500 font-mono">max -> 1.00</span>
+        </div>
+        <div class="space-y-1.5" data-graph-keyboard-target="tokenLegendRows"></div>
+        <p class="text-[10px] text-slate-500 font-mono" data-graph-keyboard-target="tokenLegendEmpty">
+          open a terminal and run opencode to start tracking tokens/s
+        </p>
+      </section>
+
       <%# Dotted grid background %>
       <div class="absolute inset-0 bg-grid pointer-events-none"></div>
 
