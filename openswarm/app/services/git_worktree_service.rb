@@ -327,7 +327,21 @@ class GitWorktreeService
 
       merge_out, merge_err, merge_status = git_capture3(parent_worktree.path, "merge", "--no-ff", selected_branch)
       unless merge_status.success?
-        return Result.new(success: false, error: command_error(merge_out, merge_err, "Failed to merge #{selected_branch} into #{parent}"))
+        conflicted_files = conflicted_files_in_worktree(parent_worktree.path)
+        error_message = command_error(merge_out, merge_err, "Failed to merge #{selected_branch} into #{parent}")
+
+        if conflicted_files.any?
+          return Result.new(success: false, error: error_message, data: {
+            conflict: true,
+            parent_id: parent_worktree.id,
+            parent_path: parent_worktree.path,
+            source_branch: selected_branch,
+            target_branch: parent,
+            conflicted_files: conflicted_files
+          })
+        end
+
+        return Result.new(success: false, error: error_message)
       end
 
       invalidate_discovery_cache!(main_root)
@@ -656,6 +670,17 @@ class GitWorktreeService
 
         break unless changed
       end
+    end
+
+    def conflicted_files_in_worktree(path)
+      stdout, _stderr, status = git_capture3(path, "diff", "--name-only", "--diff-filter=U")
+      return [] unless status.success?
+
+      stdout.to_s
+        .lines
+        .map(&:strip)
+        .reject(&:empty?)
+        .uniq
     end
 
     # Enrich worktrees with dirty status, ahead/behind counts

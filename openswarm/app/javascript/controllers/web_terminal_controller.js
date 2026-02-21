@@ -66,6 +66,7 @@ export default class extends Controller {
     this.outputParseCarry = ""
     this.sessionMetaById = new Map()
     this.pendingSessionMeta = null
+    this.pendingInitialCommand = null
     this.resizeObserver = null
     this.deferredOutput = ""
 
@@ -240,6 +241,7 @@ export default class extends Controller {
     const payload = event.detail || {}
     debug("openFromEvent", payload)
     this.pendingSessionMeta = this.buildSessionMeta(payload)
+    this.pendingInitialCommand = typeof payload.initialCommand === "string" ? payload.initialCommand : null
 
     // Desktop mode: payload has `path` from the worktree, we create PTY directly
     if (isDesktop) {
@@ -278,6 +280,7 @@ export default class extends Controller {
       this.attachDesktopTerminalHandlers()
       this.hydrateDesktopSnapshot(existingSession.sessionId)
       this.showPanel()
+      this.runPendingInitialCommand(existingSession.sessionId)
       return
     }
 
@@ -309,6 +312,7 @@ export default class extends Controller {
       await this.hydrateDesktopSnapshot(result.sessionId)
       this.resizeTerminal()
       this.updateBackgroundIndicator()
+      this.runPendingInitialCommand(result.sessionId)
     } catch (err) {
       this.statusTarget.textContent = "error"
       this.activePath = null
@@ -385,6 +389,7 @@ export default class extends Controller {
     // If we already have this session, just re-show
     if (this.sessionId === payload.session_id) {
       this.showPanel()
+      this.runPendingInitialCommand(this.sessionId)
       return
     }
 
@@ -477,6 +482,7 @@ export default class extends Controller {
           this.statusTarget.textContent = "connected"
           this.resizeTerminal()
           if (this.term) this.term.focus()
+          this.runPendingInitialCommand(this.sessionId)
         },
         disconnected: () => {
           this.statusTarget.textContent = "disconnected"
@@ -964,6 +970,20 @@ export default class extends Controller {
 
   stripAnsi(text) {
     return text.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g, "")
+  }
+
+  runPendingInitialCommand(sessionId = this.sessionId) {
+    const command = this.pendingInitialCommand
+    if (!command || !sessionId) return
+
+    const payload = command.endsWith("\r") ? command : `${command}\r`
+    if (isDesktop) {
+      desktopTerminal.write(sessionId, payload)
+    } else if (this.subscription) {
+      this.subscription.perform("input", { data: payload })
+    }
+
+    this.pendingInitialCommand = null
   }
 
   normalizePath(path) {

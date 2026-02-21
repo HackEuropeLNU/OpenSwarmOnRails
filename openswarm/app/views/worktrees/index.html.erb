@@ -445,6 +445,32 @@
     </form>
   </div>
 
+  <div class="hidden fixed inset-0 z-[57] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="mergeConflictModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-lg rounded-xl border border-amber-300 bg-white shadow-xl p-4"
+          data-action="click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">merge conflict detected</h3>
+      <p class="text-[11px] text-gray-500 font-mono mb-1">
+        source: <span class="text-gray-700" data-graph-keyboard-target="mergeConflictSource"></span>
+      </p>
+      <p class="text-[11px] text-gray-500 font-mono mb-3">
+        target: <span class="text-gray-700" data-graph-keyboard-target="mergeConflictTarget"></span>
+      </p>
+      <p class="text-[11px] text-gray-500 font-mono mb-1">conflicted files</p>
+      <pre class="text-[11px] text-gray-700 font-mono bg-gray-50 border border-gray-200 rounded-md p-2 max-h-40 overflow-auto whitespace-pre-wrap"
+           data-graph-keyboard-target="mergeConflictFiles"></pre>
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                data-action="click->graph-keyboard#cancelMergeConflictResolution">resolve manually</button>
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100"
+                data-action="click->graph-keyboard#resolveMergeConflictWithAgent">resolve with agent</button>
+      </div>
+    </form>
+  </div>
+
   <%# ═══ Terminal overlay - visibility-based hide/show (no display:none) ═══ %>
   <div class="terminal-panel"
        data-visible="false"

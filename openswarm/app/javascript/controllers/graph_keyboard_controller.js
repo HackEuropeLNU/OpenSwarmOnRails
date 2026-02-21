@@ -32,7 +32,11 @@ export default class extends Controller {
     "deleteForce",
     "commitModal",
     "commitBranch",
-    "commitInput"
+    "commitInput",
+    "mergeConflictModal",
+    "mergeConflictSource",
+    "mergeConflictTarget",
+    "mergeConflictFiles"
   ]
 
   static values = {
@@ -62,6 +66,7 @@ export default class extends Controller {
     this.pendingDeleteForce = false
     this.pendingReplaceCreatePayload = null
     this.pendingCommitWorktreeId = null
+    this.pendingMergeConflict = null
     this.openTerminalInFlight = false
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
@@ -494,11 +499,107 @@ export default class extends Controller {
       return
     }
 
-    await this.performNodeAction(
-      this.mergeUrlValue,
-      selectedNode.dataset.nodeId,
-      "Merge is not configured on this page"
-    )
+    const result = await this.requestMergeToParent(selectedNode.dataset.nodeId)
+    if (!result) return
+
+    if (result.conflict) {
+      this.openMergeConflictDialog(result)
+      return
+    }
+
+    if (result.redirect_url) {
+      Turbo.visit(result.redirect_url, { action: "replace" })
+    } else {
+      this.refresh()
+    }
+  }
+
+  async requestMergeToParent(worktreeId) {
+    if (!this.mergeUrlValue || !this.repoValue) {
+      window.alert("Merge is not configured on this page")
+      return null
+    }
+    if (!worktreeId) return null
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(this.mergeUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          worktree_id: worktreeId
+        })
+      })
+
+      const payload = await this.parseJsonResponse(response)
+      if (response.ok) return payload
+
+      if (payload.conflict) {
+        return payload
+      }
+
+      window.alert(payload.error || payload.raw || "Merge failed")
+      return null
+    } catch (error) {
+      window.alert(error?.message || "Merge failed")
+      return null
+    }
+  }
+
+  openMergeConflictDialog(payload) {
+    if (!this.hasMergeConflictModalTarget) return
+
+    const context = payload.conflict_context || {}
+    const files = Array.isArray(context.conflicted_files) ? context.conflicted_files : []
+
+    this.pendingMergeConflict = {
+      parentId: context.parent_id,
+      prompt: payload.prompt,
+      sourceBranch: context.source_branch || "(unknown)",
+      targetBranch: context.target_branch || "(unknown)",
+      conflictedFiles: files
+    }
+
+    this.mergeConflictSourceTarget.textContent = this.pendingMergeConflict.sourceBranch
+    this.mergeConflictTargetTarget.textContent = this.pendingMergeConflict.targetBranch
+    this.mergeConflictFilesTarget.textContent = files.length > 0 ? files.join("\n") : "(none reported)"
+    this.mergeConflictModalTarget.classList.remove("hidden")
+  }
+
+  cancelMergeConflictResolution(event) {
+    event?.preventDefault?.()
+    this.closeDialogs()
+  }
+
+  async resolveMergeConflictWithAgent(event) {
+    event?.preventDefault?.()
+
+    const conflict = this.pendingMergeConflict
+    if (!conflict) return
+    if (!conflict.parentId) {
+      window.alert("Unable to open parent worktree terminal")
+      return
+    }
+    if (!conflict.prompt) {
+      window.alert("Conflict prompt was not provided")
+      return
+    }
+
+    const command = `opencode --prompt ${this.shellQuote(conflict.prompt)}`
+    this.closeDialogs()
+    await this.openTerminal(conflict.parentId, { initialCommand: command })
+  }
+
+  shellQuote(text) {
+    return `'${String(text).replace(/'/g, `'"'"'`)}'`
   }
 
   createFromNode(event) {
@@ -764,6 +865,9 @@ export default class extends Controller {
     this.createModalTarget.classList.add("hidden")
     this.replaceModalTarget.classList.add("hidden")
     this.deleteModalTarget.classList.add("hidden")
+    if (this.hasMergeConflictModalTarget) {
+      this.mergeConflictModalTarget.classList.add("hidden")
+    }
     if (this.hasCommitModalTarget) {
       this.commitModalTarget.classList.add("hidden")
     }
@@ -772,6 +876,7 @@ export default class extends Controller {
     this.pendingDeleteWorktreeId = null
     this.pendingDeleteForce = false
     this.pendingCommitWorktreeId = null
+    this.pendingMergeConflict = null
   }
 
   closeDialogBackdrop(event) {
@@ -784,6 +889,7 @@ export default class extends Controller {
     return !this.createModalTarget.classList.contains("hidden") ||
       !this.replaceModalTarget.classList.contains("hidden") ||
       !this.deleteModalTarget.classList.contains("hidden") ||
+      (this.hasMergeConflictModalTarget && !this.mergeConflictModalTarget.classList.contains("hidden")) ||
       (this.hasCommitModalTarget && !this.commitModalTarget.classList.contains("hidden"))
   }
 
@@ -851,7 +957,7 @@ export default class extends Controller {
     }
   }
 
-  async openTerminal(worktreeId) {
+  async openTerminal(worktreeId, options = {}) {
     if (!worktreeId) return
 
     const node = this.nodeTargets.find((targetNode) => targetNode.dataset.nodeId === worktreeId)
@@ -875,7 +981,8 @@ export default class extends Controller {
             path,
             worktree_id: worktreeId,
             worktreeId,
-            branch: nodeBranch
+            branch: nodeBranch,
+            initialCommand: options.initialCommand || null
           }
         })
       )
@@ -921,7 +1028,8 @@ export default class extends Controller {
             ...payload,
             worktreeId,
             path: payload.path || nodePath,
-            branch: nodeBranch
+            branch: nodeBranch,
+            initialCommand: options.initialCommand || null
           }
         })
       )
