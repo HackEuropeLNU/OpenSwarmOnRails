@@ -88,6 +88,8 @@ export default class extends Controller {
       return
     }
 
+    if (this.isTerminalSessionActive(event)) return
+
     // Skip if user is typing in an input
     const tag = event.target.tagName
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
@@ -504,6 +506,23 @@ export default class extends Controller {
   isModalOpen() {
     return !this.createModalTarget.classList.contains("hidden") ||
       !this.deleteModalTarget.classList.contains("hidden")
+  }
+
+  isTerminalSessionActive(event) {
+    const panel = document.querySelector(".terminal-panel[data-visible='true']")
+    if (!panel) return false
+
+    const target = event.target
+    if (target instanceof Element && target.closest(".terminal-panel")) {
+      return true
+    }
+
+    const active = document.activeElement
+    if (active instanceof Element && active.closest(".terminal-panel")) {
+      return true
+    }
+
+    return true
   }
 
   traceAction(action) {
