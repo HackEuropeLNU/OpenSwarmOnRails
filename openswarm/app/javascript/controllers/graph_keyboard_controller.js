@@ -21,6 +21,9 @@ export default class extends Controller {
     "detailsAhead",
     "detailsBehind",
     "listItem",
+    "tokenLegendContent",
+    "tokenLegendSummary",
+    "tokenLegendToggleLabel",
     "tokenLegendRows",
     "tokenLegendEmpty",
     "createModal",
@@ -56,6 +59,7 @@ export default class extends Controller {
     this.worktreeMetaById = new Map()
     this.worktreeIdByPath = new Map()
     this.tokenRateByWorktree = this.loadTokenRates()
+    this.tokenLegendCollapsed = this.loadTokenLegendCollapsed()
     this.boundTokenRateUpdate = this.handleTokenRateUpdate.bind(this)
     window.addEventListener("worktree:token-rate", this.boundTokenRateUpdate)
     this.indexWorktreeMetadata()
@@ -604,6 +608,11 @@ export default class extends Controller {
     return `openswarm:token-rates:${repo}`
   }
 
+  tokenLegendStateStorageKey() {
+    const repo = this.repoValue || "default"
+    return `openswarm:token-legend-collapsed:${repo}`
+  }
+
   loadTokenRates() {
     try {
       const raw = window.sessionStorage.getItem(this.tokenStorageKey())
@@ -621,6 +630,29 @@ export default class extends Controller {
     } catch (_error) {
       // ignore storage failures
     }
+  }
+
+  loadTokenLegendCollapsed() {
+    try {
+      return window.sessionStorage.getItem(this.tokenLegendStateStorageKey()) === "1"
+    } catch (_error) {
+      return false
+    }
+  }
+
+  persistTokenLegendCollapsed() {
+    try {
+      window.sessionStorage.setItem(this.tokenLegendStateStorageKey(), this.tokenLegendCollapsed ? "1" : "0")
+    } catch (_error) {
+      // ignore storage failures
+    }
+  }
+
+  toggleTokenLegend(event) {
+    event?.preventDefault?.()
+    this.tokenLegendCollapsed = !this.tokenLegendCollapsed
+    this.persistTokenLegendCollapsed()
+    this.renderTokenLegend()
   }
 
   indexWorktreeMetadata() {
@@ -701,9 +733,23 @@ export default class extends Controller {
 
     rows.sort((left, right) => right.tps - left.tps)
     const maxRate = rows.reduce((max, row) => Math.max(max, row.tps), 0)
+    const idleWtCount = rows.filter((row) => row.tps === 0).length
+    const activeWtCount = rows.length - idleWtCount
 
     this.tokenLegendRowsTarget.innerHTML = ""
-    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", rows.length > 0)
+    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", rows.length > 0 || this.tokenLegendCollapsed)
+
+    if (this.hasTokenLegendSummaryTarget) {
+      this.tokenLegendSummaryTarget.textContent = `idle_wt_count: ${idleWtCount} | active_wt_count: ${activeWtCount} | max_tps: ${maxRate.toFixed(1)}`
+    }
+
+    if (this.hasTokenLegendContentTarget) {
+      this.tokenLegendContentTarget.classList.toggle("hidden", this.tokenLegendCollapsed)
+    }
+
+    if (this.hasTokenLegendToggleLabelTarget) {
+      this.tokenLegendToggleLabelTarget.textContent = this.tokenLegendCollapsed ? "expand" : "collapse"
+    }
 
     rows.forEach((row) => {
       const ratio = maxRate > 0 ? row.tps / maxRate : 0
