@@ -435,7 +435,7 @@ export default class extends Controller {
       convertEol: false,
       scrollback: 5000,
       theme: {
-        background: "#0b1220",
+        background: "#000000",
         foreground: "#dbe5f5",
         cursor: "#93c5fd",
         selectionBackground: "rgba(59, 130, 246, 0.28)",

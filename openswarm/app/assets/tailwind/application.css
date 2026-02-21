@@ -280,7 +280,7 @@ button:focus-visible {
   height: 100%;
   border-radius: 0.5rem;
   overflow: hidden;
-  background-color: #0b1220;
+  background-color: #000;
 }
 
 /* ═══ xterm overrides - hide ALL helper elements ═══ */
@@ -289,7 +289,7 @@ button:focus-visible {
   height: 100%;
   border-radius: 0.5rem;
   overflow: hidden;
-  background-color: #0b1220;
+  background-color: #000;
   position: relative;
 }
 
