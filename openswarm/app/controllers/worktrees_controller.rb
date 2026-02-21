@@ -1,12 +1,6 @@
 # frozen_string_literal: true
 
 class WorktreesController < ApplicationController
-  # Default repo roots to scan. In production, this would come from a config/model.
-  REPO_ROOTS = [
-    "/Users/matar/fafo/OpenSwarmOnRails",
-    "/Users/matar/fafo/OpenSwarm"
-  ].freeze
-
   def index
     @repos = discover_repos
     @selected_repo = if params[:repo]
@@ -100,9 +94,23 @@ class WorktreesController < ApplicationController
 
   private
 
+  def repo_roots
+    configured_roots = ENV.fetch("OPENSWARM_REPO_ROOTS", "")
+      .split(File::PATH_SEPARATOR)
+      .map(&:strip)
+      .reject(&:empty?)
+
+    return configured_roots if configured_roots.any?
+
+    [Rails.root.join("..").expand_path.to_s]
+  end
+
   def discover_repos
-    REPO_ROOTS.filter_map do |root|
+    repo_roots.filter_map do |root|
       next unless File.directory?(root)
+
+      in_git_repo = `git -C "#{root}" rev-parse --is-inside-work-tree 2>/dev/null`.strip == "true" rescue false
+      next unless in_git_repo
 
       # Get basic info about the repo
       branch_count = `git -C "#{root}" branch --list 2>/dev/null`.lines.count rescue 0

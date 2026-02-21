@@ -10,6 +10,22 @@ This repo now includes a first-pass GUI scaffold so we can iterate on look-and-f
 
 ### Run locally
 
+Backend-first mode (recommended):
+
+```bash
+make dev-backend
+```
+
+Then open `http://localhost:3000/`.
+
+If your repo root is not auto-detected, set it explicitly:
+
+```bash
+OPENSWARM_REPO_ROOTS="/absolute/path/to/your/repo" make dev-backend
+```
+
+Use multiple roots by separating them with `:`.
+
 Start backend + frontend together:
 
 ```bash
