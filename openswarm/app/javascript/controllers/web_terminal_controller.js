@@ -242,7 +242,10 @@ export default class extends Controller {
     const payload = event.detail || {}
     debug("openFromEvent", payload)
     this.pendingSessionMeta = this.buildSessionMeta(payload)
-    this.pendingInitialCommand = typeof payload.initialCommand === "string" ? payload.initialCommand : null
+    this.pendingInitialCommand =
+      typeof payload.initialCommand === "string" && payload.initialCommand.trim().length > 0
+        ? payload.initialCommand
+        : null
 
     // Desktop mode: payload has `path` from the worktree, we create PTY directly
     if (isDesktop) {
@@ -296,7 +299,7 @@ export default class extends Controller {
     const rows = 24
     debug("creating desktop terminal", { path, cols, rows })
 
-    const shouldAutoLaunchOpencode = await this.shouldAutoLaunchOpencode()
+    const shouldAutoLaunchOpencode = !this.pendingInitialCommand && (await this.shouldAutoLaunchOpencode())
 
     try {
       const result = await desktopTerminal.create({ cwd: path, cols, rows })
@@ -321,7 +324,7 @@ export default class extends Controller {
       }
 
       this.updateBackgroundIndicator()
-      this.runPendingInitialCommand(result.sessionId)
+      window.setTimeout(() => this.runPendingInitialCommand(result.sessionId), 180)
     } catch (err) {
       this.statusTarget.textContent = "error"
       this.activePath = null

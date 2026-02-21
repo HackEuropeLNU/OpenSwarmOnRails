@@ -28,13 +28,14 @@ class PromptTemplateService
     def merge_conflict_resolver_prompt(parent_path:, source_branch:, target_branch:, conflicted_files:)
       template = load_prompts.fetch("merge_conflict_resolver", DEFAULT_PROMPTS["merge_conflict_resolver"])
       files = conflicted_files.presence || ["(none reported)"]
+      formatted_files = files.map { |file| "- #{file}" }.join("\n")
 
       template
         .to_s
         .gsub("{parent_path}", parent_path.to_s)
         .gsub("{source_branch}", source_branch.to_s)
         .gsub("{target_branch}", target_branch.to_s)
-        .gsub("{conflicted_files}", files.join("\n"))
+        .gsub("{conflicted_files}", formatted_files)
     end
 
     private
