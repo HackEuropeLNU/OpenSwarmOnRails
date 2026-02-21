@@ -9,6 +9,7 @@
      data-graph-keyboard-selected-value="<%= @selected_id %>"
      data-graph-keyboard-repo-value="<%= @selected_repo&.dig(:name) %>"
      data-graph-keyboard-create-url-value="<%= create_worktree_worktrees_path %>"
+     data-graph-keyboard-delete-url-value="<%= delete_worktree_worktrees_path %>"
      data-graph-keyboard-open-url-value="<%= open_terminal_worktrees_path %>">
 
   <%# ═══ Top Bar ═══ %>
@@ -92,6 +93,8 @@
                     data-action="click->graph-keyboard#selectNode"
                     data-node-id="<%= wt.id %>"
                     data-path="<%= wt.path %>"
+                    data-branch="<%= wt.branch %>"
+                    data-dirty="<%= wt.dirty %>"
                     title="Open terminal in this worktree"
                     data-graph-keyboard-target="node">
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
@@ -278,6 +281,20 @@
       <%# ─── Actions ─── %>
       <div class="p-4 flex-1">
         <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">actions</h3>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <button type="button"
+                  class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100 transition-colors"
+                  data-action="click->graph-keyboard#createFromSelected"
+                  title="Create worktree from selected (a)">
+            create
+          </button>
+          <button type="button"
+                  class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 transition-colors"
+                  data-action="click->graph-keyboard#deleteSelected"
+                  title="Delete selected worktree (d)">
+            delete
+          </button>
+        </div>
         <div class="grid grid-cols-1 gap-0.5">
           <% [
             ["r", "refresh worktrees"],
@@ -318,6 +335,59 @@
       <span class="text-red-600 font-semibold mr-2">error</span><%= @error %>
     </div>
   <% end %>
+
+  <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="createModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+          data-action="submit->graph-keyboard#submitCreate click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">create worktree</h3>
+      <p class="text-[11px] text-gray-500 font-mono mb-3">
+        parent: <span class="text-gray-700" data-graph-keyboard-target="createParent"></span>
+      </p>
+      <label class="block text-[11px] text-gray-500 font-mono mb-1" for="create-worktree-name">branch name</label>
+      <input id="create-worktree-name"
+             type="text"
+             required
+             autocomplete="off"
+             class="w-full rounded-md border border-gray-300 px-2.5 py-2 text-[12px] font-mono text-gray-800 focus:outline-none focus:border-blue-400"
+             data-graph-keyboard-target="createInput"
+             placeholder="feature/my-change" />
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                data-action="click->graph-keyboard#cancelCreate">cancel</button>
+        <button type="submit"
+                class="px-2.5 py-1.5 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100">create</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="deleteModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+          data-action="submit->graph-keyboard#submitDelete click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">delete worktree</h3>
+      <p class="text-[11px] text-gray-500 font-mono mb-1">
+        branch: <span class="text-gray-700" data-graph-keyboard-target="deleteBranch"></span>
+      </p>
+      <p class="text-[11px] text-gray-500 font-mono mb-3">
+        dirty: <span class="text-gray-700" data-graph-keyboard-target="deleteDirty"></span>
+      </p>
+      <label class="flex items-center gap-2 text-[11px] text-gray-700 font-mono">
+        <input type="checkbox" class="rounded border-gray-300" data-graph-keyboard-target="deleteForce" />
+        force delete if dirty
+      </label>
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                data-action="click->graph-keyboard#cancelDelete">cancel</button>
+        <button type="submit"
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">delete</button>
+      </div>
+    </form>
+  </div>
 
   <%# ═══ Terminal overlay (hide/show, PTY stays alive in background) ═══ %>
   <div class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-[1px]"

@@ -91,6 +91,34 @@ class GitWorktreeService
       Result.new(success: false, error: "#{e.class}: #{e.message}")
     end
 
+    def delete_worktree(repo_root:, worktree_path:, force: false)
+      return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
+
+      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
+
+      main_root = main_root.strip
+      target_path = worktree_path.to_s.strip
+      return Result.new(success: false, error: "Worktree path is required") if target_path.empty?
+      return Result.new(success: false, error: "Cannot delete main worktree") if target_path == main_root
+
+      args = ["worktree", "remove"]
+      args << "--force" if force
+      args << target_path
+
+      stdout, stderr, status = git_capture3(main_root, *args)
+      unless status.success?
+        error = stderr.to_s.strip
+        error = stdout.to_s.strip if error.empty?
+        error = "Failed to delete worktree" if error.empty?
+        return Result.new(success: false, error: error)
+      end
+
+      Result.new(success: true, data: { path: target_path })
+    rescue => e
+      Result.new(success: false, error: "#{e.class}: #{e.message}")
+    end
+
     # Scan known workspace patterns to find repo roots automatically.
     # Returns array of repo root paths.
     def scan_workspaces(*roots)

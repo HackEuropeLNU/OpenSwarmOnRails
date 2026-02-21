@@ -96,6 +96,46 @@ class WorktreesController < ApplicationController
     }
   end
 
+  def delete_worktree
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+    force = ActiveModel::Type::Boolean.new.cast(params[:force])
+
+    repos = discover_repos
+    selected_repo = repos.find { |r| r[:name] == repo_name }
+    return render json: { error: "Repository not found" }, status: :not_found unless selected_repo
+
+    discovery = GitWorktreeService.discover(selected_repo[:root])
+    unless discovery.success
+      return render json: { error: discovery.error }, status: :unprocessable_entity
+    end
+
+    worktree = discovery.data[:worktrees].find { |wt| wt.id == worktree_id }
+    return render json: { error: "Worktree not found" }, status: :unprocessable_entity unless worktree
+    return render json: { error: "Cannot delete main worktree" }, status: :unprocessable_entity if worktree.parent_branch.nil?
+    if worktree.dirty && !force
+      return render json: { error: "Worktree has uncommitted changes. Enable force delete to continue." }, status: :unprocessable_entity
+    end
+
+    result = GitWorktreeService.delete_worktree(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path,
+      force: force
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name)
+    }
+  rescue => e
+    Rails.logger.error("[delete_worktree] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error deleting worktree: #{e.message}" }, status: :internal_server_error
+  end
+
   private
 
   def repo_roots

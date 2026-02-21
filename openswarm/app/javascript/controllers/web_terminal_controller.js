@@ -29,9 +29,11 @@ export default class extends Controller {
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
     this.toggleHandler = this.togglePanel.bind(this)
+    this.actionTraceHandler = this.traceActionClick.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
+    window.addEventListener("worktree:action-click", this.actionTraceHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
 
@@ -69,6 +71,7 @@ export default class extends Controller {
     console.log(TAG, "disconnect")
     window.removeEventListener("worktree:open-terminal", this.openHandler)
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
+    window.removeEventListener("worktree:action-click", this.actionTraceHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
 
@@ -374,5 +377,12 @@ export default class extends Controller {
     }
 
     return bytes
+  }
+
+  traceActionClick(event) {
+    const message = event?.detail?.message || "click (unknown-action)"
+    console.log(TAG, message)
+    if (!this.term) return
+    this.term.writeln(`\r\n${message}`)
   }
 }

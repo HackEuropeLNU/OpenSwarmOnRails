@@ -4,8 +4,26 @@ const TAG = "[DEBUG:graph_keyboard]"
 
 // Handles keyboard navigation and node selection for the worktree graph.
 export default class extends Controller {
-  static targets = ["canvas", "node", "details"]
-  static values = { selected: String, createUrl: String, openUrl: String, repo: String }
+  static targets = [
+    "canvas",
+    "node",
+    "details",
+    "createModal",
+    "createInput",
+    "createParent",
+    "deleteModal",
+    "deleteBranch",
+    "deleteDirty",
+    "deleteForce"
+  ]
+
+  static values = {
+    selected: String,
+    createUrl: String,
+    deleteUrl: String,
+    openUrl: String,
+    repo: String
+  }
 
   connect() {
     console.log(TAG, "connect", {
@@ -15,6 +33,8 @@ export default class extends Controller {
     })
     this.boundKeydown = this.handleKeydown.bind(this)
     document.addEventListener("keydown", this.boundKeydown)
+    this.pendingCreateParentId = null
+    this.pendingDeleteWorktreeId = null
     this.highlightSelected()
   }
 
@@ -23,6 +43,14 @@ export default class extends Controller {
   }
 
   handleKeydown(event) {
+    if (this.isModalOpen()) {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        this.closeDialogs()
+      }
+      return
+    }
+
     // Skip if user is typing in an input
     const tag = event.target.tagName
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
@@ -50,6 +78,10 @@ export default class extends Controller {
         event.preventDefault()
         this.openSelectedTerminal()
         break
+      case "d":
+        event.preventDefault()
+        this.deleteSelected()
+        break
     }
   }
 
@@ -72,6 +104,7 @@ export default class extends Controller {
   }
 
   async selectNode(event) {
+    this.traceAction("select-node")
     const button = event.currentTarget
     const nodeId = button.dataset.nodeId
     if (!nodeId) return
@@ -98,10 +131,12 @@ export default class extends Controller {
   }
 
   refresh() {
+    this.traceAction("refresh")
     Turbo.visit(window.location.href, { action: "replace" })
   }
 
   openSelectedTerminal() {
+    this.traceAction("open-terminal")
     // If a terminal session is already alive (hidden in background), toggle it back
     const termPanel = document.querySelector("[data-web-terminal-target='panel']")
     const termStatus = document.querySelector("[data-web-terminal-target='status']")
@@ -125,31 +160,51 @@ export default class extends Controller {
   }
 
   createFromSelected() {
+    this.traceAction("open-create-dialog")
     const selectedNode = this.nodeTargets.find(
       (node) => node.dataset.nodeId === this.selectedValue
     )
 
     if (!selectedNode) return
-
-    const createButton = selectedNode.parentElement?.querySelector(".node-create-btn")
-    if (createButton) {
-      this.createFromNode({ currentTarget: createButton })
-    }
+    this.openCreateDialog(selectedNode.dataset.nodeId, selectedNode.dataset.branch)
   }
 
-  async createFromNode(event) {
+  createFromNode(event) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
+    this.traceAction("open-create-dialog")
 
     const button = event.currentTarget
     const parentId = button.dataset.parentId
     const parentBranch = button.dataset.parentBranch || "this branch"
 
-    const name = window.prompt(`New worktree name from ${parentBranch}:`)
-    if (name === null) return
+    this.openCreateDialog(parentId, parentBranch)
+  }
 
-    const trimmedName = name.trim()
-    if (!trimmedName) return
+  openCreateDialog(parentId, parentBranch) {
+    if (!parentId) return
+
+    this.pendingCreateParentId = parentId
+    this.createParentTarget.textContent = parentBranch || "this branch"
+    this.createInputTarget.value = ""
+    this.createModalTarget.classList.remove("hidden")
+    this.createInputTarget.focus()
+  }
+
+  cancelCreate(event) {
+    event?.preventDefault?.()
+    this.closeDialogs()
+  }
+
+  async submitCreate(event) {
+    event.preventDefault()
+    this.traceAction("submit-create")
+
+    const parentId = this.pendingCreateParentId
+    const trimmedName = this.createInputTarget.value.trim()
+
+    if (!parentId || !trimmedName) return
+    
     if (!this.createUrlValue || !this.repoValue || !parentId) {
       console.error("Missing create-worktree params", {
         createUrl: this.createUrlValue,
@@ -163,8 +218,6 @@ export default class extends Controller {
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
       ?.getAttribute("content")
-
-    button.disabled = true
 
     try {
       const response = await fetch(this.createUrlValue, {
@@ -199,13 +252,117 @@ export default class extends Controller {
         return
       }
 
+      this.closeDialogs()
       Turbo.visit(payload.redirect_url, { action: "replace" })
     } catch (error) {
       console.error("Worktree create request threw", error)
       window.alert(error?.message || "Failed to create worktree")
-    } finally {
-      button.disabled = false
     }
+  }
+
+  deleteSelected() {
+    this.traceAction("open-delete-dialog")
+    const selectedNode = this.nodeTargets.find(
+      (node) => node.dataset.nodeId === this.selectedValue
+    )
+
+    if (!selectedNode) return
+    this.openDeleteDialog(selectedNode)
+  }
+
+  openDeleteDialog(node) {
+    const worktreeId = node.dataset.nodeId
+    if (!worktreeId) return
+
+    const branch = node.dataset.branch || "this worktree"
+    const dirty = node.dataset.dirty === "true"
+
+    this.pendingDeleteWorktreeId = worktreeId
+    this.deleteBranchTarget.textContent = branch
+    this.deleteDirtyTarget.textContent = dirty ? "yes" : "no"
+    this.deleteForceTarget.checked = false
+    this.deleteModalTarget.classList.remove("hidden")
+  }
+
+  cancelDelete(event) {
+    event?.preventDefault?.()
+    this.closeDialogs()
+  }
+
+  async submitDelete(event) {
+    event.preventDefault()
+    this.traceAction("submit-delete")
+
+    const worktreeId = this.pendingDeleteWorktreeId
+    if (!worktreeId || !this.deleteUrlValue || !this.repoValue) return
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(this.deleteUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          worktree_id: worktreeId,
+          force: this.deleteForceTarget.checked
+        })
+      })
+
+      const payload = await this.parseJsonResponse(response)
+      if (!response.ok) {
+        const message = payload.error || payload.raw || `Failed to delete worktree (${response.status})`
+        console.error("Worktree delete request failed", {
+          status: response.status,
+          statusText: response.statusText,
+          payload
+        })
+        window.alert(message)
+        return
+      }
+
+      if (!payload.redirect_url) {
+        console.error("Worktree delete missing redirect_url", payload)
+        window.alert("Worktree deleted but response was incomplete")
+        return
+      }
+
+      this.closeDialogs()
+      Turbo.visit(payload.redirect_url, { action: "replace" })
+    } catch (error) {
+      console.error("Worktree delete request threw", error)
+      window.alert(error?.message || "Failed to delete worktree")
+    }
+  }
+
+  closeDialogs() {
+    this.createModalTarget.classList.add("hidden")
+    this.deleteModalTarget.classList.add("hidden")
+    this.pendingCreateParentId = null
+    this.pendingDeleteWorktreeId = null
+  }
+
+  closeDialogBackdrop(event) {
+    if (event.target === event.currentTarget) {
+      this.closeDialogs()
+    }
+  }
+
+  isModalOpen() {
+    return !this.createModalTarget.classList.contains("hidden") ||
+      !this.deleteModalTarget.classList.contains("hidden")
+  }
+
+  traceAction(action) {
+    const message = `click (${action})`
+    console.log(TAG, message)
+    window.dispatchEvent(new CustomEvent("worktree:action-click", { detail: { message } }))
   }
 
   async parseJsonResponse(response) {
