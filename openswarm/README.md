@@ -1,24 +1,35 @@
-# README
+# OpenSwarm Rails App
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+This directory contains the main OpenSwarm Rails application.
 
-Things you may want to cover:
+For project-level setup and desktop workflow commands, start with the root README:
 
-* Ruby version
+- `../README.md`
 
-* System dependencies
+## Local setup
 
-* Configuration
+```bash
+bundle install
+bin/setup --skip-server
+```
 
-* Database creation
+## Run locally
 
-* Database initialization
+```bash
+bin/rails server
+bin/rails tailwindcss:watch
+```
 
-* How to run the test suite
+Or from the repository root, use:
 
-* Services (job queues, cache servers, search engines, etc.)
+```bash
+make dev-backend
+```
 
-* Deployment instructions
+## Checks
 
-* ...
+```bash
+bin/ci
+```
+
+`bin/ci` runs setup plus style and security checks configured in `config/ci.rb`.
