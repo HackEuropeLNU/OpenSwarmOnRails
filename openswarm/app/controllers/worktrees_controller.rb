@@ -126,42 +126,14 @@ class WorktreesController < ApplicationController
     end
   end
 
-  # Compute x,y positions and SVG edges for a tree of worktrees.
-  # Uses a parent-aware layered layout so children stay under their parent.
-  def compute_layout(tree, worktrees)
-    return { nodes: [], edges: [], width: 1000, height: 400 } if tree.empty? || worktrees.empty?
+  # Compute x,y positions and SVG edges for worktrees.
+  # Uses the same layered approach as OpenSwarm TUI.
+  def compute_layout(_tree, worktrees)
+    return { nodes: [], edges: [], width: 1000, height: 400 } if worktrees.empty?
 
     worktree_by_id = worktrees.index_by(&:id)
-    children_by_id = Hash.new { |h, k| h[k] = [] }
-    parent_by_id = {}
-    visited = {}
-
-    walk = nil
-    walk = lambda do |node, parent_id = nil|
-      return unless node.is_a?(Hash)
-
-      node_id = node[:id]
-      return if node_id.nil? || visited[node_id]
-
-      visited[node_id] = true
-      parent_by_id[node_id] = parent_id if parent_id
-
-      raw_children = Array(node[:children]).select { |child| child.is_a?(Hash) && child[:id] }
-      raw_children.each do |child|
-        child_id = child[:id]
-        children_by_id[node_id] << child_id
-        walk.call(child, node_id)
-      end
-    end
-
-    walk.call(tree) if tree.is_a?(Hash)
-
-    root_id = if tree.is_a?(Hash)
-      tree[:id]
-    end
-    unless root_id && worktree_by_id.key?(root_id)
-      root_id = worktrees.find { |wt| wt.parent_branch.nil? }&.id || worktrees.first&.id
-    end
+    root = worktrees.find { |wt| wt.parent_branch.nil? && !wt.detached } || worktrees.first
+    root_id = root&.id
 
     branch_to_id = {}
     worktrees.each do |wt|
@@ -170,48 +142,47 @@ class WorktreesController < ApplicationController
       branch_to_id[wt.branch] ||= wt.id
     end
 
+    parent_by_id = {}
     worktrees.each do |wt|
       next if wt.id == root_id
       next if wt.detached
-      next if parent_by_id.key?(wt.id)
 
-      parent_id = wt.parent_branch && branch_to_id[wt.parent_branch]
+      parent_id = nil
+      if wt.parent_branch
+        parent_id = branch_to_id[wt.parent_branch]
+      end
+
+      parent_id ||= find_branch_parent_id(wt.id, wt.branch, branch_to_id)
       parent_id = root_id if parent_id.nil? || parent_id == wt.id
-      next unless parent_id
-
-      parent_by_id[wt.id] = parent_id
-      children_by_id[parent_id] << wt.id
+      parent_by_id[wt.id] = parent_id if parent_id
     end
 
-    worktree_by_id.keys.each do |id|
-      next if id == root_id
-      next if parent_by_id.key?(id)
-      next unless root_id
-
-      parent_by_id[id] = root_id
-      children_by_id[root_id] << id
+    children_by_id = Hash.new { |h, k| h[k] = [] }
+    parent_by_id.each do |child_id, parent_id|
+      children_by_id[parent_id] << child_id
     end
-
-    children_by_id.each_value(&:uniq!)
+    children_by_id.each_value do |children|
+      children.uniq!
+      children.sort_by! { |child_id| worktree_by_id[child_id]&.branch.to_s }
+    end
 
     depth_by_id = {}
-    if root_id
-      depth_by_id[root_id] = 0
-      queue = [root_id]
-      until queue.empty?
-        current_id = queue.shift
-        children_by_id[current_id].each do |child_id|
-          next if depth_by_id.key?(child_id)
+    depth_for = nil
+    depth_for = lambda do |id, visiting = {}|
+      return depth_by_id[id] if depth_by_id.key?(id)
+      return 0 if visiting[id]
 
-          depth_by_id[child_id] = depth_by_id[current_id] + 1
-          queue << child_id
-        end
+      parent_id = parent_by_id[id]
+      if parent_id.nil? || parent_id == id || !worktree_by_id.key?(parent_id)
+        depth_by_id[id] = 0
+      else
+        visiting[id] = true
+        depth_by_id[id] = depth_for.call(parent_id, visiting) + 1
+        visiting.delete(id)
       end
+      depth_by_id[id]
     end
-
-    worktree_by_id.keys.each do |id|
-      depth_by_id[id] ||= (id == root_id ? 0 : 1)
-    end
+    worktree_by_id.each_key { |id| depth_for.call(id) }
 
     x_units = {}
     placing = {}
@@ -220,26 +191,17 @@ class WorktreesController < ApplicationController
     assign_x = nil
     assign_x = lambda do |id|
       return x_units[id] if x_units.key?(id)
-      if placing[id]
-        x_units[id] ||= cursor
-        return x_units[id]
-      end
+      return cursor if placing[id]
 
       placing[id] = true
-      child_ids = children_by_id[id]
-        .select { |child_id| worktree_by_id.key?(child_id) }
-        .sort_by { |child_id| worktree_by_id[child_id]&.branch.to_s }
+      child_ids = children_by_id[id].select { |child_id| worktree_by_id.key?(child_id) }
 
       if child_ids.empty?
         x_units[id] = cursor
         cursor += 1.0
       else
         child_ids.each { |child_id| assign_x.call(child_id) }
-        first_child = child_ids.first
-        last_child = child_ids.last
-        first_x = x_units[first_child] || assign_x.call(first_child)
-        last_x = x_units[last_child] || assign_x.call(last_child)
-        x_units[id] = (first_x + last_x) * 0.5
+        x_units[id] = (x_units[child_ids.first] + x_units[child_ids.last]) * 0.5
       end
 
       placing.delete(id)
@@ -248,7 +210,7 @@ class WorktreesController < ApplicationController
 
     roots = [root_id].compact
     worktree_by_id.each_key do |id|
-      roots << id if parent_by_id[id].nil? && id != root_id
+      roots << id unless parent_by_id.key?(id)
     end
     roots.uniq.each_with_index do |id, idx|
       assign_x.call(id)
@@ -312,5 +274,16 @@ class WorktreesController < ApplicationController
     end
 
     { nodes: nodes, edges: edges, width: canvas_width.to_i, height: canvas_height.to_i }
+  end
+
+  def find_branch_parent_id(current_id, branch, branch_to_id)
+    parts = branch.to_s.split("/")
+    while parts.length > 1
+      parts.pop
+      candidate = parts.join("/")
+      parent_id = branch_to_id[candidate]
+      return parent_id if parent_id && parent_id != current_id
+    end
+    nil
   end
 end

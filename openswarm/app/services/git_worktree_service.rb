@@ -81,7 +81,7 @@ class GitWorktreeService
       end
 
       Result.new(success: true, data: {
-        id: branch.gsub(/[^a-zA-Z0-9_-]/, "_"),
+        id: worktree_id_for(worktree_path, branch),
         branch: branch,
         path: worktree_path
       })
@@ -178,7 +178,7 @@ class GitWorktreeService
       is_main = (path == main_root)
 
       WorktreeInfo.new(
-        id: branch.gsub(/[^a-zA-Z0-9_-]/, "_"),
+        id: worktree_id_for(path, branch),
         path: path,
         branch: branch,
         head: data[:head] || "",
@@ -190,6 +190,14 @@ class GitWorktreeService
         state: is_main ? "main" : "committed",
         parent_branch: nil
       )
+    end
+
+    def worktree_id_for(path, branch)
+      require "digest"
+
+      branch_part = branch.to_s.gsub(/[^a-zA-Z0-9_-]/, "_")
+      branch_part = "worktree" if branch_part.empty?
+      "#{branch_part}_#{Digest::SHA1.hexdigest(path.to_s)[0, 10]}"
     end
 
     def assign_parent_branches!(worktrees, main_root)
