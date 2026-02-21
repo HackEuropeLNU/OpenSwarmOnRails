@@ -80,7 +80,7 @@ class WorktreesController < ApplicationController
     worktree = discovery.data[:worktrees].find { |wt| wt.id == worktree_id }
     return render json: { error: "Worktree not found" }, status: :unprocessable_entity unless worktree
 
-    result = LocalTerminalService.open(worktree.path)
+    result = WebTerminalService.open(worktree.path)
     unless result.success
       return render json: { error: result.error }, status: :unprocessable_entity
     end
@@ -88,7 +88,8 @@ class WorktreesController < ApplicationController
     render json: {
       ok: true,
       path: worktree.path,
-      app: result.data[:app]
+      session_id: result.data[:session_id],
+      shell: result.data[:shell]
     }
   end
 

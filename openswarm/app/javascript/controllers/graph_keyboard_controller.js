@@ -191,7 +191,15 @@ export default class extends Controller {
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         window.alert(payload.error || "Failed to open terminal")
+        return
       }
+
+      const payload = await response.json().catch(() => ({}))
+      window.dispatchEvent(
+        new CustomEvent("worktree:open-terminal", {
+          detail: payload
+        })
+      )
     } catch (_error) {
       window.alert("Failed to open terminal")
     }
