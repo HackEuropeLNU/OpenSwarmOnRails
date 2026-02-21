@@ -18,6 +18,13 @@ const ACK_BATCH_SIZE = 5000
 const OPENCODE_SPINNER_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/
 const OPENCODE_IDLE_TIMEOUT_MS = 1500
 const SHELL_PROMPT_REGEX = /(?:\r?\n|^)[^\r\n]*[%$#] $/
+const TOKEN_RATE_REGEXES = [
+  /(\d+(?:\.\d+)?)\s*(?:tok|token|tokens)\s*\/\s*s\b/i,
+  /(\d+(?:\.\d+)?)\s*(?:tok|token|tokens)\s*per\s*sec(?:ond)?\b/i,
+  /\b(?:tok|token|tokens)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/i,
+  /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/i
+]
+const TOKEN_DEBUG_SAMPLE_LIMIT = 120
 const TOKEN_RATE_PATTERNS = [
   /(\d+(?:\.\d+)?)\s*(?:tokens?|tok)\s*\/\s*s\b/gi,
   /\b(?:tokens?|tok)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
@@ -53,11 +60,10 @@ export default class extends Controller {
     this.spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     this.spinnerFrameIndex = 0
     this.spinnerIntervalId = null
-    this.activityTimeoutId = null
-    this.isBackgroundBusy = false
-    this.trackingOpencode = false
-    this.inputBuffer = ""
-    this.outputTail = ""
+    this.sessionStateById = new Map()
+    this.runningSessionIds = new Set()
+    this.sessionTimeoutIds = new Map()
+    this.textDecoder = new TextDecoder()
     this.outputParseCarry = ""
     this.sessionMetaById = new Map()
     this.pendingSessionMeta = null
@@ -76,13 +82,21 @@ export default class extends Controller {
     if (isDesktop) {
       debug("desktop mode: subscribing to IPC events")
       const offData = desktopTerminal.onData((sessionId, data) => {
-        if (!this.term) return
+        this.recordOutputActivity(data, sessionId)
 
         const activeSessionMatch = Boolean(this.sessionId) && sessionId === this.sessionId
         const pendingSessionMatch = !this.sessionId && this.acceptDesktopDataBeforeSessionId &&
           (!this.pendingDesktopSessionId || this.pendingDesktopSessionId === sessionId)
 
-        if (!activeSessionMatch && !pendingSessionMatch) return
+        if (!activeSessionMatch && !pendingSessionMatch) {
+          desktopTerminal.ack(sessionId, data.length)
+          return
+        }
+
+        if (!this.term) {
+          desktopTerminal.ack(sessionId, data.length)
+          return
+        }
 
         if (!this.sessionId && pendingSessionMatch && !this.pendingDesktopSessionId) {
           this.pendingDesktopSessionId = sessionId
@@ -109,6 +123,15 @@ export default class extends Controller {
         if (mappedPath) {
           this.desktopSessionsByPath.delete(mappedPath)
           this.desktopPathBySessionId.delete(sessionId)
+        }
+
+        this.resetOpencodeTracking(sessionId)
+        this.sessionStateById.delete(sessionId)
+        this.runningSessionIds.delete(sessionId)
+        const timeoutId = this.sessionTimeoutIds.get(sessionId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          this.sessionTimeoutIds.delete(sessionId)
         }
 
         if (sessionId !== this.sessionId) return
@@ -321,7 +344,7 @@ export default class extends Controller {
 
     this.term.onData((data) => {
       if (!this.sessionId) return
-      this.trackInputForOpencode(data)
+      this.trackInputForOpencode(data, this.sessionId)
       if (data && data.trim()) {
         debug("term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
       }
@@ -436,16 +459,16 @@ export default class extends Controller {
 
           if (message.type === "output") {
             if (message.encoding === "base64") {
-              const decoded = this.decodeBase64(message.data || "")
-              const output = this.bytesToString(decoded)
-              this.term.write(output)
-              this.recordOutputActivity(output)
-              this.processTerminalOutput(output, this.sessionId)
+              const bytes = this.decodeBase64(message.data || "")
+              const text = this.textDecoder.decode(bytes)
+              this.recordOutputActivity(text, this.sessionId)
+              this.term.write(bytes)
+              this.processTerminalOutput(text, this.sessionId)
             } else {
-              const output = message.data || ""
-              this.term.write(output)
-              this.recordOutputActivity(output)
-              this.processTerminalOutput(output, this.sessionId)
+              const text = message.data || ""
+              this.recordOutputActivity(text, this.sessionId)
+              this.term.write(text)
+              this.processTerminalOutput(text, this.sessionId)
             }
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
@@ -461,7 +484,7 @@ export default class extends Controller {
     // Wire input for browser mode
     this.term.onData((data) => {
       if (!this.subscription) return
-      this.trackInputForOpencode(data)
+      this.trackInputForOpencode(data, this.sessionId)
       this.subscription.perform("input", { data })
     })
 
@@ -521,7 +544,16 @@ export default class extends Controller {
     if (!this.panelVisible) {
       document.documentElement.classList.remove("overflow-hidden")
     }
-    this.resetOpencodeTracking()
+    if (killRemote && closingSessionId) {
+      this.resetOpencodeTracking(closingSessionId)
+      this.sessionStateById.delete(closingSessionId)
+      this.runningSessionIds.delete(closingSessionId)
+      const timeoutId = this.sessionTimeoutIds.get(closingSessionId)
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        this.sessionTimeoutIds.delete(closingSessionId)
+      }
+    }
     this.updateBackgroundIndicator()
 
     if (this.term) {
@@ -627,71 +659,112 @@ export default class extends Controller {
     this.term.writeln(`\r\n${message}`)
   }
 
-  trackInputForOpencode(data) {
-    if (!data) return
+  trackInputForOpencode(data, sessionId = this.sessionId) {
+    if (!data || !sessionId) return
 
+    const state = this.getSessionState(sessionId)
     for (const char of data) {
       if (char === "\u0003") {
-        this.resetOpencodeTracking()
+        this.resetOpencodeTracking(sessionId)
         continue
       }
 
       if (char === "\r" || char === "\n") {
-        const command = this.inputBuffer.trim()
+        const command = state.inputBuffer.trim()
         if (command.startsWith("opencode")) {
-          this.trackingOpencode = true
-          this.outputTail = ""
-          this.clearBackgroundActivity()
+          state.trackingOpencode = true
+          state.outputTail = ""
+          state.lastTokenRate = null
+          state.noTokenChunkCount = 0
+          this.runningSessionIds.delete(sessionId)
           this.updateBackgroundIndicator()
+          console.log(TAG, "opencode start detected", { sessionId, path: this.desktopPathBySessionId.get(sessionId) || this.activePath })
         }
-        this.inputBuffer = ""
+        state.inputBuffer = ""
         continue
       }
 
       if (char === "\u007f" || char === "\b") {
-        this.inputBuffer = this.inputBuffer.slice(0, -1)
+        state.inputBuffer = state.inputBuffer.slice(0, -1)
         continue
       }
 
       if (char >= " " && char <= "~") {
-        this.inputBuffer += char
+        state.inputBuffer += char
       }
     }
   }
 
-  recordOutputActivity(text) {
-    if (!this.trackingOpencode || !text) return
+  recordOutputActivity(text, sessionId = this.sessionId) {
+    if (!text || !sessionId) return
 
-    this.outputTail += text
-    if (this.outputTail.length > 2048) {
-      this.outputTail = this.outputTail.slice(-2048)
+    const state = this.getSessionState(sessionId)
+    if (!state.trackingOpencode) return
+
+    state.outputTail += text
+    if (state.outputTail.length > 2048) {
+      state.outputTail = state.outputTail.slice(-2048)
     }
 
-    if (SHELL_PROMPT_REGEX.test(this.outputTail)) {
-      this.clearBackgroundActivity()
-      this.trackingOpencode = false
-      this.outputTail = ""
-      this.updateBackgroundIndicator()
+    const normalizedText = this.stripAnsi(text)
+    const tokenRate = this.extractTokenRate(normalizedText)
+
+    if (tokenRate !== null) {
+      state.lastTokenRate = tokenRate
+      state.noTokenChunkCount = 0
+      console.log(TAG, "token/s detected", {
+        sessionId,
+        path: this.desktopPathBySessionId.get(sessionId) || this.activePath,
+        tokenRate,
+        sample: normalizedText.slice(0, TOKEN_DEBUG_SAMPLE_LIMIT)
+      })
+    } else {
+      state.noTokenChunkCount += 1
+      if (state.noTokenChunkCount % 20 === 0) {
+        console.log(TAG, "token/s not detected in recent output", {
+          sessionId,
+          path: this.desktopPathBySessionId.get(sessionId) || this.activePath,
+          chunkCount: state.noTokenChunkCount,
+          sample: normalizedText.slice(0, TOKEN_DEBUG_SAMPLE_LIMIT)
+        })
+      }
+    }
+
+    if (SHELL_PROMPT_REGEX.test(state.outputTail)) {
+      this.resetOpencodeTracking(sessionId)
+      console.log(TAG, "opencode prompt detected, marking idle", {
+        sessionId,
+        path: this.desktopPathBySessionId.get(sessionId) || this.activePath
+      })
       return
     }
 
     if (!OPENCODE_SPINNER_REGEX.test(text)) return
 
-    this.isBackgroundBusy = true
+    this.runningSessionIds.add(sessionId)
     this.startSpinner()
     this.updateBackgroundIndicator()
 
-    if (this.activityTimeoutId) {
-      clearTimeout(this.activityTimeoutId)
+    const existingTimeout = this.sessionTimeoutIds.get(sessionId)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
     }
 
-    this.activityTimeoutId = setTimeout(() => {
-      this.isBackgroundBusy = false
-      this.stopSpinner()
-      this.trackingOpencode = false
-      this.outputTail = ""
+    const timeoutId = setTimeout(() => {
+      this.runningSessionIds.delete(sessionId)
+      if (state) {
+        state.trackingOpencode = false
+        state.outputTail = ""
+      }
+      this.sessionTimeoutIds.delete(sessionId)
       this.updateBackgroundIndicator()
+      console.log(TAG, "opencode idle timeout", {
+        sessionId,
+        path: this.desktopPathBySessionId.get(sessionId) || this.activePath
+      })
     }, OPENCODE_IDLE_TIMEOUT_MS)
+
+    this.sessionTimeoutIds.set(sessionId, timeoutId)
   }
 
   startSpinner() {
@@ -715,30 +788,131 @@ export default class extends Controller {
     }
   }
 
-  clearBackgroundActivity() {
-    this.isBackgroundBusy = false
-    this.stopSpinner()
-    if (this.activityTimeoutId) {
-      clearTimeout(this.activityTimeoutId)
-      this.activityTimeoutId = null
+  clearBackgroundActivity(sessionId = null) {
+    if (sessionId) {
+      this.runningSessionIds.delete(sessionId)
+      const timeoutId = this.sessionTimeoutIds.get(sessionId)
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        this.sessionTimeoutIds.delete(sessionId)
+      }
+    } else {
+      this.runningSessionIds.clear()
+      for (const timeoutId of this.sessionTimeoutIds.values()) {
+        clearTimeout(timeoutId)
+      }
+      this.sessionTimeoutIds.clear()
+    }
+
+    if (this.runningSessionIds.size === 0) {
+      this.stopSpinner()
     }
   }
 
-  resetOpencodeTracking() {
-    this.trackingOpencode = false
-    this.inputBuffer = ""
-    this.outputTail = ""
+  resetOpencodeTracking(sessionId = this.sessionId) {
+    if (sessionId) {
+      const state = this.sessionStateById.get(sessionId)
+      if (state) {
+        state.trackingOpencode = false
+        state.inputBuffer = ""
+        state.outputTail = ""
+        state.lastTokenRate = null
+        state.noTokenChunkCount = 0
+      }
+      this.clearBackgroundActivity(sessionId)
+      this.updateBackgroundIndicator()
+      return
+    }
+
+    for (const state of this.sessionStateById.values()) {
+      state.trackingOpencode = false
+      state.inputBuffer = ""
+      state.outputTail = ""
+      state.lastTokenRate = null
+      state.noTokenChunkCount = 0
+    }
     this.clearBackgroundActivity()
+    this.updateBackgroundIndicator()
   }
 
   updateBackgroundIndicator() {
     if (!this.hasBackgroundIndicatorTarget) return
 
-    const shouldShow = Boolean(this.sessionId) && !this.panelVisible
+    if (!isDesktop) {
+      const shouldShow = Boolean(this.sessionId) && !this.panelVisible
+      this.backgroundIndicatorTarget.classList.toggle("hidden", !shouldShow)
+      if (!this.hasBackgroundLabelTarget) return
+      this.backgroundLabelTarget.textContent = shouldShow ? "running (1)" : "idle (0)"
+      return
+    }
+
+    const totalDesktopSessions = this.desktopSessionsByPath.size
+    const visibleSessionCount = this.panelVisible && this.sessionId ? 1 : 0
+    const backgroundSessionCount = Math.max(totalDesktopSessions - visibleSessionCount, 0)
+    const runningBackgroundCount = this.countRunningBackgroundSessions()
+    const idleBackgroundCount = Math.max(backgroundSessionCount - runningBackgroundCount, 0)
+    const shouldShow = backgroundSessionCount > 0
+
     this.backgroundIndicatorTarget.classList.toggle("hidden", !shouldShow)
 
+    if (runningBackgroundCount > 0) {
+      this.startSpinner()
+    } else {
+      this.stopSpinner()
+    }
+
     if (!this.hasBackgroundLabelTarget) return
-    this.backgroundLabelTarget.textContent = this.isBackgroundBusy ? "opencode running" : "terminal idle"
+    if (runningBackgroundCount > 0 && idleBackgroundCount > 0) {
+      this.backgroundLabelTarget.textContent = `running (${runningBackgroundCount}) · idle (${idleBackgroundCount})`
+      return
+    }
+
+    if (runningBackgroundCount > 0) {
+      this.backgroundLabelTarget.textContent = `running (${runningBackgroundCount})`
+      return
+    }
+
+    this.backgroundLabelTarget.textContent = `idle (${idleBackgroundCount})`
+  }
+
+  countRunningBackgroundSessions() {
+    const runningPaths = new Set()
+    for (const sessionId of this.runningSessionIds) {
+      const path = this.desktopPathBySessionId.get(sessionId)
+      if (!path) continue
+      if (this.panelVisible && this.activePath === path) continue
+      runningPaths.add(path)
+    }
+    return runningPaths.size
+  }
+
+  getSessionState(sessionId) {
+    const key = sessionId || "browser"
+    if (!this.sessionStateById.has(key)) {
+      this.sessionStateById.set(key, {
+        trackingOpencode: false,
+        inputBuffer: "",
+        outputTail: "",
+        lastTokenRate: null,
+        noTokenChunkCount: 0
+      })
+    }
+    return this.sessionStateById.get(key)
+  }
+
+  extractTokenRate(text) {
+    if (!text) return null
+    for (const regex of TOKEN_RATE_REGEXES) {
+      const match = text.match(regex)
+      if (!match) continue
+      const parsed = Number.parseFloat(match[1])
+      if (Number.isFinite(parsed)) return parsed
+    }
+    return null
+  }
+
+  stripAnsi(text) {
+    return text.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g, "")
   }
 
   normalizePath(path) {
