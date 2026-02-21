@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // Handles keyboard navigation and node selection for the worktree graph.
 export default class extends Controller {
   static targets = ["canvas", "node", "details"]
-  static values = { selected: String }
+  static values = { selected: String, createUrl: String, repo: String }
 
   connect() {
     this.boundKeydown = this.handleKeydown.bind(this)
@@ -34,6 +34,10 @@ export default class extends Controller {
           event.preventDefault()
           this.refresh()
         }
+        break
+      case "a":
+        event.preventDefault()
+        this.createFromSelected()
         break
     }
   }
@@ -84,5 +88,65 @@ export default class extends Controller {
 
   refresh() {
     Turbo.visit(window.location.href, { action: "replace" })
+  }
+
+  createFromSelected() {
+    const selectedNode = this.nodeTargets.find(
+      (node) => node.dataset.nodeId === this.selectedValue
+    )
+
+    if (!selectedNode) return
+
+    const createButton = selectedNode.parentElement?.querySelector(".node-create-btn")
+    if (createButton) {
+      this.createFromNode({ currentTarget: createButton })
+    }
+  }
+
+  async createFromNode(event) {
+    const button = event.currentTarget
+    const parentId = button.dataset.parentId
+    const parentBranch = button.dataset.parentBranch || "this branch"
+
+    const name = window.prompt(`New worktree name from ${parentBranch}:`)
+    if (name === null) return
+
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+    if (!this.createUrlValue || !this.repoValue || !parentId) return
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    button.disabled = true
+
+    try {
+      const response = await fetch(this.createUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          parent_id: parentId,
+          name: trimmedName
+        })
+      })
+
+      const payload = await response.json()
+      if (!response.ok) {
+        window.alert(payload.error || "Failed to create worktree")
+        return
+      }
+
+      Turbo.visit(payload.redirect_url, { action: "replace" })
+    } catch (_error) {
+      window.alert("Failed to create worktree")
+    } finally {
+      button.disabled = false
+    }
   }
 }

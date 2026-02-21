@@ -3,7 +3,9 @@
 <div class="w-full h-screen flex flex-col overflow-hidden"
      data-controller="graph-keyboard theme"
      data-theme-target="root"
-     data-graph-keyboard-selected-value="<%= @selected_id %>">
+     data-graph-keyboard-selected-value="<%= @selected_id %>"
+     data-graph-keyboard-repo-value="<%= @selected_repo&.dig(:name) %>"
+     data-graph-keyboard-create-url-value="<%= create_worktree_worktrees_path %>">
 
   <%# ═══ Top Bar ═══ %>
   <header class="flex items-center justify-between px-5 py-2.5 border-b border-slate-800/60 bg-[#0c1120]/90 backdrop-blur-md shrink-0 z-10">
@@ -94,13 +96,14 @@
         <% @layout[:nodes].each do |node_data| %>
           <% wt = node_data[:worktree] %>
           <% is_selected = wt.id == @selected_id %>
-          <button type="button"
-                  class="absolute group cursor-pointer transition-all duration-200 ease-out focus:outline-none"
-                  style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;"
-                  data-action="click->graph-keyboard#selectNode"
-                  data-node-id="<%= wt.id %>"
-                  data-graph-keyboard-target="node">
-            <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
+          <div class="absolute group"
+               style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;">
+            <button type="button"
+                    class="w-full cursor-pointer transition-all duration-200 ease-out focus:outline-none"
+                    data-action="click->graph-keyboard#selectNode"
+                    data-node-id="<%= wt.id %>"
+                    data-graph-keyboard-target="node">
+              <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
                         bg-[#111827]/90 backdrop-blur-sm
                         hover:-translate-y-0.5 hover:shadow-lg
                         <%= is_selected ? 'node-glow-selected border-blue-500/40 ring-1 ring-blue-400/20' :
@@ -136,8 +139,20 @@
                   <span class="text-[10px] text-amber-400/60 font-mono">-<%= wt.behind %></span>
                 <% end %>
               </div>
-            </div>
-          </button>
+              </div>
+            </button>
+
+            <button type="button"
+                    class="node-create-btn absolute left-1/2 top-full mt-2.5 w-8 h-8 rounded-full
+                           border border-blue-400/40 bg-[#101b33]/95 text-blue-300 text-[18px] leading-none
+                           flex items-center justify-center shadow-lg shadow-blue-900/20"
+                    title="Create child worktree"
+                    data-action="click->graph-keyboard#createFromNode"
+                    data-parent-id="<%= wt.id %>"
+                    data-parent-branch="<%= wt.branch %>">
+              +
+            </button>
+          </div>
         <% end %>
 
         <% if @worktrees.empty? %>
