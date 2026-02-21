@@ -399,16 +399,15 @@
       <p class="text-[11px] text-gray-500 font-mono mb-3">
         dirty: <span class="text-gray-700" data-graph-keyboard-target="deleteDirty"></span>
       </p>
-      <label class="flex items-center gap-2 text-[11px] text-gray-700 font-mono">
-        <input type="checkbox" class="rounded border-gray-300" data-graph-keyboard-target="deleteForce" />
-        force delete if dirty
-      </label>
+      <p class="text-[11px] text-gray-500 font-mono mb-1">
+        this worktree will be deleted immediately.
+      </p>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
                 class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
-                data-action="click->graph-keyboard#cancelDelete">cancel</button>
+                data-action="click->graph-keyboard#cancelDelete">no</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">delete</button>
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100">yes</button>
       </div>
     </form>
   </div>

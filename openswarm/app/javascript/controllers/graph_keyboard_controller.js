@@ -28,8 +28,7 @@ export default class extends Controller {
     "replaceBranch",
     "deleteModal",
     "deleteBranch",
-    "deleteDirty",
-    "deleteForce"
+    "deleteDirty"
   ]
 
   static values = {
@@ -51,6 +50,7 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundKeydown)
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
+    this.pendingDeleteForce = false
     this.pendingReplaceCreatePayload = null
     this.openTerminalInFlight = false
 
@@ -448,9 +448,9 @@ export default class extends Controller {
     const dirty = node.dataset.dirty === "true"
 
     this.pendingDeleteWorktreeId = worktreeId
+    this.pendingDeleteForce = dirty
     this.deleteBranchTarget.textContent = branch
     this.deleteDirtyTarget.textContent = dirty ? "yes" : "no"
-    this.deleteForceTarget.checked = false
     this.deleteModalTarget.classList.remove("hidden")
   }
 
@@ -481,7 +481,7 @@ export default class extends Controller {
         body: JSON.stringify({
           repo: this.repoValue,
           worktree_id: worktreeId,
-          force: this.deleteForceTarget.checked
+          force: this.pendingDeleteForce
         })
       })
 
@@ -518,6 +518,7 @@ export default class extends Controller {
     this.pendingCreateParentId = null
     this.pendingReplaceCreatePayload = null
     this.pendingDeleteWorktreeId = null
+    this.pendingDeleteForce = false
   }
 
   closeDialogBackdrop(event) {
