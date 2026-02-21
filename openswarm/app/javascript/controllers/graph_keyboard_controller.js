@@ -21,11 +21,6 @@ export default class extends Controller {
     "detailsAhead",
     "detailsBehind",
     "listItem",
-    "tokenLegendContent",
-    "tokenLegendSummary",
-    "tokenLegendToggleLabel",
-    "tokenLegendRows",
-    "tokenLegendEmpty",
     "createModal",
     "createInput",
     "createParent",
@@ -56,13 +51,6 @@ export default class extends Controller {
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
     this.openTerminalInFlight = false
-    this.worktreeMetaById = new Map()
-    this.worktreeIdByPath = new Map()
-    this.tokenRateByWorktree = this.loadTokenRates()
-    this.tokenLegendCollapsed = this.loadTokenLegendCollapsed()
-    this.boundTokenRateUpdate = this.handleTokenRateUpdate.bind(this)
-    window.addEventListener("worktree:token-rate", this.boundTokenRateUpdate)
-    this.indexWorktreeMetadata()
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
     if (initialId) {
@@ -70,13 +58,10 @@ export default class extends Controller {
     } else {
       this.renderSelectedState()
     }
-
-    this.renderTokenLegend()
   }
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
-    window.removeEventListener("worktree:token-rate", this.boundTokenRateUpdate)
   }
 
   handleKeydown(event) {
@@ -622,183 +607,4 @@ export default class extends Controller {
     }
   }
 
-  tokenStorageKey() {
-    const repo = this.repoValue || "default"
-    return `openswarm:token-rates:${repo}`
-  }
-
-  tokenLegendStateStorageKey() {
-    const repo = this.repoValue || "default"
-    return `openswarm:token-legend-collapsed:${repo}`
-  }
-
-  loadTokenRates() {
-    try {
-      const raw = window.sessionStorage.getItem(this.tokenStorageKey())
-      if (!raw) return {}
-      const parsed = JSON.parse(raw)
-      return parsed && typeof parsed === "object" ? parsed : {}
-    } catch (_error) {
-      return {}
-    }
-  }
-
-  persistTokenRates() {
-    try {
-      window.sessionStorage.setItem(this.tokenStorageKey(), JSON.stringify(this.tokenRateByWorktree))
-    } catch (_error) {
-      // ignore storage failures
-    }
-  }
-
-  loadTokenLegendCollapsed() {
-    try {
-      return window.sessionStorage.getItem(this.tokenLegendStateStorageKey()) === "1"
-    } catch (_error) {
-      return false
-    }
-  }
-
-  persistTokenLegendCollapsed() {
-    try {
-      window.sessionStorage.setItem(this.tokenLegendStateStorageKey(), this.tokenLegendCollapsed ? "1" : "0")
-    } catch (_error) {
-      // ignore storage failures
-    }
-  }
-
-  toggleTokenLegend(event) {
-    event?.preventDefault?.()
-    this.tokenLegendCollapsed = !this.tokenLegendCollapsed
-    this.persistTokenLegendCollapsed()
-    this.renderTokenLegend()
-  }
-
-  indexWorktreeMetadata() {
-    this.worktreeMetaById.clear()
-    this.worktreeIdByPath.clear()
-
-    this.nodeTargets.forEach((node) => {
-      const id = node.dataset.nodeId
-      if (!id) return
-
-      const meta = {
-        id,
-        branch: node.dataset.branch || id,
-        path: node.dataset.path || ""
-      }
-
-      this.worktreeMetaById.set(id, meta)
-      if (meta.path) this.worktreeIdByPath.set(meta.path, id)
-
-      if (!this.tokenRateByWorktree[id]) {
-        this.tokenRateByWorktree[id] = {
-          tps: 0,
-          updatedAt: null
-        }
-      }
-    })
-
-    Object.keys(this.tokenRateByWorktree).forEach((id) => {
-      if (!this.worktreeMetaById.has(id)) {
-        delete this.tokenRateByWorktree[id]
-      }
-    })
-
-    this.persistTokenRates()
-  }
-
-  handleTokenRateUpdate(event) {
-    const detail = event.detail || {}
-    const worktreeId = this.resolveWorktreeId(detail)
-    if (!worktreeId || !this.worktreeMetaById.has(worktreeId)) return
-
-    const numericRate = Number(detail.tokensPerSecond)
-    if (!Number.isFinite(numericRate) || numericRate < 0) return
-
-    this.tokenRateByWorktree[worktreeId] = {
-      tps: numericRate,
-      updatedAt: detail.timestamp || Date.now()
-    }
-
-    this.persistTokenRates()
-    this.renderTokenLegend()
-  }
-
-  resolveWorktreeId(detail) {
-    if (detail.worktreeId && this.worktreeMetaById.has(detail.worktreeId)) {
-      return detail.worktreeId
-    }
-
-    if (detail.path && this.worktreeIdByPath.has(detail.path)) {
-      return this.worktreeIdByPath.get(detail.path)
-    }
-
-    return null
-  }
-
-  renderTokenLegend() {
-    if (!this.hasTokenLegendRowsTarget || !this.hasTokenLegendEmptyTarget) return
-
-    const rows = []
-    this.worktreeMetaById.forEach((meta) => {
-      const metric = this.tokenRateByWorktree[meta.id] || { tps: 0 }
-      rows.push({
-        id: meta.id,
-        branch: meta.branch,
-        tps: Number(metric.tps) || 0
-      })
-    })
-
-    const activeRows = rows.filter((row) => row.tps > 0)
-    activeRows.sort((left, right) => right.tps - left.tps)
-    const maxRate = activeRows.reduce((max, row) => Math.max(max, row.tps), 0)
-    const idleWtCount = rows.length - activeRows.length
-    const activeWtCount = activeRows.length
-
-    this.tokenLegendRowsTarget.innerHTML = ""
-    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", activeRows.length > 0 || this.tokenLegendCollapsed)
-
-    if (this.hasTokenLegendSummaryTarget) {
-      this.tokenLegendSummaryTarget.textContent = `idle ${idleWtCount} · active ${activeWtCount}`
-    }
-
-    if (this.hasTokenLegendContentTarget) {
-      this.tokenLegendContentTarget.classList.toggle("hidden", this.tokenLegendCollapsed)
-    }
-
-    if (this.hasTokenLegendToggleLabelTarget) {
-      this.tokenLegendToggleLabelTarget.textContent = this.tokenLegendCollapsed ? "show" : "hide"
-    }
-
-    activeRows.forEach((row) => {
-      const ratio = maxRate > 0 ? row.tps / maxRate : 0
-      const rowElement = document.createElement("div")
-      rowElement.className = "grid grid-cols-[minmax(0,1fr)_76px_44px] items-center gap-2"
-
-      const nameElement = document.createElement("span")
-      nameElement.className = "truncate text-[10px] text-slate-300 font-mono"
-      nameElement.textContent = row.branch
-
-      const trackElement = document.createElement("span")
-      trackElement.className = "h-1.5 rounded-full bg-slate-800/90 overflow-hidden"
-
-      const fillElement = document.createElement("span")
-      fillElement.className = "block h-full rounded-full bg-cyan-400/90"
-      fillElement.style.width = `${Math.max(4, Math.round(ratio * 100))}%`
-      if (row.tps === 0) {
-        fillElement.style.width = "0%"
-      }
-
-      const ratioElement = document.createElement("span")
-      ratioElement.className = "text-right text-[10px] text-cyan-200 font-mono"
-      ratioElement.textContent = `${row.tps.toFixed(1)}`
-
-      trackElement.appendChild(fillElement)
-      rowElement.appendChild(nameElement)
-      rowElement.appendChild(trackElement)
-      rowElement.appendChild(ratioElement)
-      this.tokenLegendRowsTarget.appendChild(rowElement)
-    })
-  }
 }
