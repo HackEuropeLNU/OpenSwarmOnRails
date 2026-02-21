@@ -790,7 +790,7 @@ export default class extends Controller {
       return true
     }
 
-    return true
+    return false
   }
 
   traceAction(action) {
