@@ -327,7 +327,7 @@ button:focus-visible {
   background: transparent !important;
   color: transparent !important;
   resize: none !important;
-  pointer-events: none !important;
+  pointer-events: auto !important;
   opacity: 0 !important;
   overflow: hidden;
   z-index: -1000;
