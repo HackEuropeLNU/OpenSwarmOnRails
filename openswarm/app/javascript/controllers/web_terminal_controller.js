@@ -180,7 +180,7 @@ export default class extends Controller {
     document.documentElement.classList.remove("overflow-hidden")
   }
 
-  // ── Show / hide using visibility (never display:none, never dispose xterm) ──
+  // ── Show / hide using slide transform (never dispose xterm, always keep mounted) ──
 
   showPanel() {
     debug("showPanel")
@@ -188,12 +188,15 @@ export default class extends Controller {
     this.panelVisible = true
     document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
-    this.ensureTerminalReady()
 
-    requestAnimationFrame(() => {
+    // Force reflow and refresh terminal after slide animation completes
+    setTimeout(() => {
+      if (this.term) {
+        this.term.focus()
+        this.term.refresh(0, this.term.rows - 1)
+      }
       this.resizeTerminal()
-      if (this.term) this.term.focus()
-    })
+    }, 200)
   }
 
   hidePanel() {
@@ -202,18 +205,6 @@ export default class extends Controller {
     this.panelVisible = false
     document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
-  }
-
-  ensureTerminalReady() {
-    if (this.term) return
-
-    this.setupTerminal()
-    if (isDesktop) {
-      this.attachDesktopTerminalHandlers()
-    } else if (this.subscription) {
-      this.attachBrowserTerminalHandlers()
-    }
-    this.flushDeferredOutput()
   }
 
   togglePanel() {
@@ -283,9 +274,6 @@ export default class extends Controller {
       this.setupTerminal()
       this.attachDesktopTerminalHandlers()
       this.showPanel()
-      this.term.focus()
-      this.resizeTerminal()
-      this.updateBackgroundIndicator()
       return
     }
 
@@ -295,12 +283,11 @@ export default class extends Controller {
 
     this.pathTarget.textContent = path
     this.statusTarget.textContent = "creating"
-
     this.setupTerminal()
     this.showPanel()
 
-    const cols = this.term?.cols || 80
-    const rows = this.term?.rows || 24
+    const cols = 80
+    const rows = 24
     debug("creating desktop terminal", { path, cols, rows })
 
     try {
@@ -322,10 +309,7 @@ export default class extends Controller {
       this.statusTarget.textContent = "connected"
       this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
       this.desktopPathBySessionId.set(result.sessionId, path)
-
       this.attachDesktopTerminalHandlers()
-
-      this.term.focus()
       this.resizeTerminal()
       this.updateBackgroundIndicator()
     } catch (err) {
