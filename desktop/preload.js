@@ -45,6 +45,11 @@ contextBridge.exposeInMainWorld("desktopShell", {
       return ipcRenderer.invoke("terminal:list");
     },
 
+    /** Read recent buffered output for a session. */
+    snapshot: (sessionId, maxChars = 100000) => {
+      return ipcRenderer.invoke("terminal:snapshot", { sessionId, maxChars });
+    },
+
     /** Subscribe to PTY output data. Callback receives (sessionId, data). */
     onData: (callback) => {
       const handler = (_event, { sessionId, data }) => callback(sessionId, data);

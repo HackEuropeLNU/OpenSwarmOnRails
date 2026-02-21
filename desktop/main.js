@@ -14,6 +14,31 @@ const BACKEND_WAIT_MS = Number(process.env.BACKEND_WAIT_MS || 20000);
 
 const terminalManager = new TerminalManager();
 
+function broadcastToWindows(channel, payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    win.webContents.send(channel, payload);
+  }
+}
+
+terminalManager.on("data", ({ sessionId, data }) => {
+  if (!data || data.length === 0) return;
+  const windows = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed());
+  if (windows.length === 0) {
+    terminalManager.ack(sessionId, data.length);
+    return;
+  }
+
+  for (const win of windows) {
+    win.webContents.send("terminal:data", { sessionId, data });
+  }
+});
+
+terminalManager.on("exit", ({ sessionId, exitCode }) => {
+  debug("terminal exit broadcast", { sessionId, exitCode });
+  broadcastToWindows("terminal:exit", { sessionId, exitCode });
+});
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitForBackend(url, timeoutMs) {
@@ -98,29 +123,9 @@ function offlinePage(url) {
 
 function setupTerminalIPC() {
   ipcMain.handle("terminal:create", (_event, { cwd, cols, rows }) => {
-    const sender = _event.sender;
-    debug("IPC terminal:create", { cwd, cols, rows, senderId: sender.id });
+    debug("IPC terminal:create", { cwd, cols, rows, senderId: _event.sender.id });
 
-    const result = terminalManager.create({
-      cwd,
-      cols,
-      rows,
-      onData: (sessionId, data) => {
-        if (!sender.isDestroyed()) {
-          if (data.length > 0) {
-            sender.send("terminal:data", { sessionId, data });
-          }
-        } else {
-          debug("IPC terminal:data dropped, sender destroyed", { sessionId });
-        }
-      },
-      onExit: (sessionId, exitCode) => {
-        if (!sender.isDestroyed()) {
-          debug("IPC terminal:exit send", { sessionId, exitCode });
-          sender.send("terminal:exit", { sessionId, exitCode });
-        }
-      }
-    });
+    const result = terminalManager.create({ cwd, cols, rows, reuse: true });
 
     debug("IPC terminal:create result", result);
     return result;
@@ -154,6 +159,10 @@ function setupTerminalIPC() {
     const sessions = terminalManager.list();
     debug("IPC terminal:list", { count: sessions.length });
     return sessions;
+  });
+
+  ipcMain.handle("terminal:snapshot", (_event, { sessionId, maxChars }) => {
+    return terminalManager.snapshot(sessionId, maxChars);
   });
 
   ipcMain.handle("dialog:pick-git-repo", async () => {

@@ -1,4 +1,6 @@
 const os = require("os");
+const path = require("node:path");
+const { EventEmitter } = require("node:events");
 const pty = require("node-pty");
 const { randomUUID } = require("crypto");
 
@@ -8,43 +10,62 @@ const debug = (...args) => {
   if (DEBUG) console.log(TAG, ...args);
 };
 
-// ── Flow control constants (matches VS Code approach) ──
-const HIGH_WATERMARK = 100000; // pause pty after this many unacked chars
-const LOW_WATERMARK = 5000;    // resume pty after acked below this
+// Flow control constants.
+const HIGH_WATERMARK = 100000;
+const LOW_WATERMARK = 5000;
 
-class TerminalManager {
+const DEFAULT_COLS = 80;
+const DEFAULT_ROWS = 24;
+const MAX_BUFFER_CHARS = 200000;
+const DEFAULT_SNAPSHOT_CHARS = 100000;
+
+const SHELL_LOGIN_ARG_BY_BASENAME = {
+  bash: ["-il"],
+  zsh: ["-il"],
+  sh: ["-il"],
+  fish: ["-il"],
+  pwsh: ["-NoLogo"],
+  powershell: ["-NoLogo"],
+  "powershell.exe": ["-NoLogo"]
+};
+
+class TerminalManager extends EventEmitter {
   constructor() {
+    super();
     this.sessions = new Map(); // sessionId -> SessionState
+    this.sessionIdByCwd = new Map(); // normalized cwd -> sessionId
     debug("constructed, node-pty version:", require("node-pty/package.json").version);
   }
 
-  /**
-   * Create a new PTY session.
-   * @param {string} cwd - Working directory
-   * @param {number} cols - Initial columns
-   * @param {number} rows - Initial rows
-   * @param {Function} onData - Called with (sessionId, data:string)
-   * @param {Function} onExit - Called with (sessionId, exitCode:number)
-   * @returns {{ sessionId, shell, cwd }}
-   */
-  create({ cwd, cols = 80, rows = 24, onData, onExit }) {
-    const shell = process.env.SHELL || (os.platform() === "win32" ? "powershell.exe" : "/bin/zsh");
+  create({ cwd, cols = DEFAULT_COLS, rows = DEFAULT_ROWS, shellPath, shellArgs, env = {}, reuse = true }) {
+    const normalizedCwd = this._normalizeCwd(cwd);
+
+    if (!normalizedCwd) {
+      throw new Error("Invalid terminal cwd");
+    }
+
+    const existingSessionId = this.sessionIdByCwd.get(normalizedCwd);
+    if (reuse && existingSessionId) {
+      const existing = this.sessions.get(existingSessionId);
+      if (existing && existing.state !== "exited") {
+        return this._serializeSession(existing);
+      }
+      this.sessionIdByCwd.delete(normalizedCwd);
+    }
+
+    const profile = this._resolveShellProfile({ shellPath, shellArgs, env });
     const sessionId = randomUUID();
 
-    debug("create() called - cwd:", cwd, "cols:", cols, "rows:", rows, "shell:", shell);
+    debug("create() called - cwd:", normalizedCwd, "cols:", cols, "rows:", rows, "shell:", profile.shellPath);
 
     let ptyProcess;
     try {
-      ptyProcess = pty.spawn(shell, ["-il"], {
+      ptyProcess = pty.spawn(profile.shellPath, profile.shellArgs, {
         name: "xterm-256color",
-        cols,
-        rows,
-        cwd,
-        env: {
-          ...process.env,
-          TERM: "xterm-256color",
-          COLORTERM: "truecolor"
-        }
+        cols: this._clampCols(cols),
+        rows: this._clampRows(rows),
+        cwd: normalizedCwd,
+        env: profile.env
       });
       debug("pty.spawn() succeeded - pid:", ptyProcess.pid, "sessionId:", sessionId);
     } catch (err) {
@@ -55,17 +76,19 @@ class TerminalManager {
     const session = {
       id: sessionId,
       pty: ptyProcess,
-      shell,
-      cwd,
-      state: "ready",       // ready | exited
+      shell: profile.shellPath,
+      cwd: normalizedCwd,
+      state: "ready",
       unackedChars: 0,
       paused: false,
+      buffer: "",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
       dataDisposable: null,
       exitDisposable: null
     };
 
     let dataChunks = 0;
-    // Wire PTY output -> renderer via callback
     session.dataDisposable = ptyProcess.onData((data) => {
       dataChunks++;
       if (dataChunks <= 3) {
@@ -74,35 +97,35 @@ class TerminalManager {
         debug(`onData - suppressing further data logs for sessionId:${sessionId}`);
       }
 
+      session.buffer = `${session.buffer}${data}`.slice(-MAX_BUFFER_CHARS);
+      session.updatedAt = Date.now();
       session.unackedChars += data.length;
 
-      // Flow control: pause if renderer is behind
       if (!session.paused && session.unackedChars > HIGH_WATERMARK) {
         debug("PAUSING pty - unackedChars:", session.unackedChars, "sessionId:", sessionId);
         ptyProcess.pause();
         session.paused = true;
       }
 
-      onData(sessionId, data);
+      this.emit("data", { sessionId, data });
     });
 
     session.exitDisposable = ptyProcess.onExit(({ exitCode }) => {
       debug("onExit - sessionId:", sessionId, "exitCode:", exitCode);
       session.state = "exited";
-      onExit(sessionId, exitCode);
-      this._cleanup(sessionId);
+      session.updatedAt = Date.now();
+      this.emit("exit", { sessionId, exitCode });
+      this._cleanup(sessionId, { keepMapEntry: false });
     });
 
     this.sessions.set(sessionId, session);
+    this.sessionIdByCwd.set(normalizedCwd, sessionId);
 
-    const result = { sessionId, shell, cwd };
+    const result = this._serializeSession(session);
     debug("create() returning:", JSON.stringify(result));
     return result;
   }
 
-  /**
-   * Write input data to a PTY session.
-   */
   write(sessionId, data) {
     const session = this.sessions.get(sessionId);
     if (!session || session.state === "exited") {
@@ -113,17 +136,14 @@ class TerminalManager {
     return true;
   }
 
-  /**
-   * Resize a PTY session.
-   */
   resize(sessionId, cols, rows) {
     const session = this.sessions.get(sessionId);
     if (!session || session.state === "exited") {
       debug("resize() - session not found or exited, sessionId:", sessionId);
       return false;
     }
-    cols = Math.max(1, Math.min(cols, 1000));
-    rows = Math.max(1, Math.min(rows, 500));
+    cols = this._clampCols(cols);
+    rows = this._clampRows(rows);
     debug("resize() - sessionId:", sessionId, "cols:", cols, "rows:", rows);
     try {
       session.pty.resize(cols, rows);
@@ -133,10 +153,6 @@ class TerminalManager {
     return true;
   }
 
-  /**
-   * Acknowledge processed characters (flow control).
-   * Renderer calls this after writing data to xterm.
-   */
   ack(sessionId, charCount) {
     const session = this.sessions.get(sessionId);
     if (!session) return;
@@ -148,9 +164,6 @@ class TerminalManager {
     }
   }
 
-  /**
-   * Kill a PTY session.
-   */
   kill(sessionId) {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -163,39 +176,108 @@ class TerminalManager {
     } catch (_e) {
       console.error(TAG, "kill() threw:", _e.message);
     }
-    this._cleanup(sessionId);
+    this._cleanup(sessionId, { keepMapEntry: false });
     return true;
   }
 
-  /**
-   * List all active sessions.
-   */
   list() {
     const result = [];
     for (const [id, session] of this.sessions) {
-      result.push({
-        sessionId: id,
-        shell: session.shell,
-        cwd: session.cwd,
-        state: session.state
-      });
+      result.push(this._serializeSession(session, id));
     }
     return result;
   }
 
-  /**
-   * Kill all sessions (app shutdown).
-   */
+  snapshot(sessionId, maxChars = DEFAULT_SNAPSHOT_CHARS) {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.state === "exited") return "";
+
+    const limit = Math.max(0, Math.min(Number(maxChars) || DEFAULT_SNAPSHOT_CHARS, MAX_BUFFER_CHARS));
+    if (limit === 0) return "";
+    return session.buffer.slice(-limit);
+  }
+
   destroyAll() {
     for (const sessionId of this.sessions.keys()) {
       this.kill(sessionId);
     }
   }
 
-  _cleanup(sessionId) {
+  _cleanup(sessionId, { keepMapEntry = false } = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) return;
-    this.sessions.delete(sessionId);
+
+    try {
+      session.dataDisposable?.dispose?.();
+      session.exitDisposable?.dispose?.();
+    } catch (_error) {
+      // Ignore cleanup errors.
+    }
+
+    if (this.sessionIdByCwd.get(session.cwd) === sessionId) {
+      this.sessionIdByCwd.delete(session.cwd);
+    }
+
+    if (!keepMapEntry) {
+      this.sessions.delete(sessionId);
+    }
+  }
+
+  _serializeSession(session, fallbackId = null) {
+    return {
+      sessionId: session.id || fallbackId,
+      shell: session.shell,
+      cwd: session.cwd,
+      state: session.state,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
+    };
+  }
+
+  _normalizeCwd(value) {
+    if (!value || typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    try {
+      return path.resolve(trimmed);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  _resolveShellProfile({ shellPath, shellArgs, env }) {
+    const platform = os.platform();
+    const resolvedShellPath =
+      (typeof shellPath === "string" && shellPath.trim()) ||
+      process.env.OPENSWARM_TERMINAL_SHELL ||
+      process.env.SHELL ||
+      (platform === "win32" ? "powershell.exe" : "/bin/zsh");
+
+    const basename = path.basename(resolvedShellPath).toLowerCase();
+    const resolvedShellArgs =
+      Array.isArray(shellArgs) && shellArgs.length > 0
+        ? shellArgs.map((arg) => String(arg))
+        : (SHELL_LOGIN_ARG_BY_BASENAME[basename] || []);
+
+    return {
+      shellPath: resolvedShellPath,
+      shellArgs: resolvedShellArgs,
+      env: {
+        ...process.env,
+        ...env,
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor"
+      }
+    };
+  }
+
+  _clampCols(cols) {
+    return Math.max(20, Math.min(Number(cols) || DEFAULT_COLS, 1000));
+  }
+
+  _clampRows(rows) {
+    return Math.max(4, Math.min(Number(rows) || DEFAULT_ROWS, 500));
   }
 }
 

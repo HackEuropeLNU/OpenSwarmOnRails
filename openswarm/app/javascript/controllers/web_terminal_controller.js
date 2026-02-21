@@ -54,8 +54,6 @@ export default class extends Controller {
     this.panelVisible = false
     this.unackedChars = 0     // renderer-side flow control counter
     this.ipcCleanups = []     // IPC listener cleanup functions
-    this.acceptDesktopDataBeforeSessionId = false
-    this.pendingDesktopSessionId = null
     this.desktopSessionsByPath = new Map()
     this.desktopPathBySessionId = new Map()
     this.spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -94,10 +92,7 @@ export default class extends Controller {
         this.recordOutputActivity(data, sessionId)
 
         const activeSessionMatch = Boolean(this.sessionId) && sessionId === this.sessionId
-        const pendingSessionMatch = !this.sessionId && this.acceptDesktopDataBeforeSessionId &&
-          (!this.pendingDesktopSessionId || this.pendingDesktopSessionId === sessionId)
-
-        if (!activeSessionMatch && !pendingSessionMatch) {
+        if (!activeSessionMatch) {
           desktopTerminal.ack(sessionId, data.length)
           return
         }
@@ -107,10 +102,6 @@ export default class extends Controller {
           this.processTerminalOutput(data, sessionId)
           desktopTerminal.ack(sessionId, data.length)
           return
-        }
-
-        if (!this.sessionId && pendingSessionMatch && !this.pendingDesktopSessionId) {
-          this.pendingDesktopSessionId = sessionId
         }
 
         if (this.unackedChars === 0) {
@@ -273,13 +264,12 @@ export default class extends Controller {
       this.statusTarget.textContent = "connected"
       this.setupTerminal()
       this.attachDesktopTerminalHandlers()
+      this.hydrateDesktopSnapshot(existingSession.sessionId)
       this.showPanel()
       return
     }
 
     this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
-    this.acceptDesktopDataBeforeSessionId = true
-    this.pendingDesktopSessionId = null
 
     this.pathTarget.textContent = path
     this.statusTarget.textContent = "creating"
@@ -294,14 +284,8 @@ export default class extends Controller {
       const result = await desktopTerminal.create({ cwd: path, cols, rows })
       debug("desktopTerminal.create result", result)
 
-      if (this.pendingDesktopSessionId && this.pendingDesktopSessionId !== result.sessionId) {
-        this.term?.reset()
-      }
-
       this.sessionId = result.sessionId
       this.activePath = path
-      this.acceptDesktopDataBeforeSessionId = false
-      this.pendingDesktopSessionId = null
       if (this.pendingSessionMeta) {
         this.sessionMetaById.set(result.sessionId, this.pendingSessionMeta)
       }
@@ -310,14 +294,29 @@ export default class extends Controller {
       this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
       this.desktopPathBySessionId.set(result.sessionId, path)
       this.attachDesktopTerminalHandlers()
+      await this.hydrateDesktopSnapshot(result.sessionId)
       this.resizeTerminal()
       this.updateBackgroundIndicator()
     } catch (err) {
-      this.acceptDesktopDataBeforeSessionId = false
-      this.pendingDesktopSessionId = null
       this.statusTarget.textContent = "error"
       this.activePath = null
       console.error("Failed to create desktop terminal:", err)
+    }
+  }
+
+  async hydrateDesktopSnapshot(sessionId) {
+    if (!isDesktop || !sessionId || !this.term || typeof desktopTerminal.snapshot !== "function") {
+      return
+    }
+
+    try {
+      const snapshot = await desktopTerminal.snapshot(sessionId, DEFERRED_OUTPUT_LIMIT)
+      if (!snapshot) return
+      this.term.write(snapshot)
+      this.recordOutputActivity(snapshot, sessionId)
+      this.processTerminalOutput(snapshot, sessionId)
+    } catch (error) {
+      debug("hydrateDesktopSnapshot failed", { sessionId, error })
     }
   }
 
@@ -578,8 +577,6 @@ export default class extends Controller {
     this.sessionId = null
     this.activePath = null
     this.unackedChars = 0
-    this.acceptDesktopDataBeforeSessionId = false
-    this.pendingDesktopSessionId = null
     this.pendingSessionMeta = null
     this.outputParseCarry = ""
     this.deferredOutput = ""
