@@ -201,7 +201,8 @@ class WorktreesController < ApplicationController
         cursor += 1.0
       else
         child_ids.each { |child_id| assign_x.call(child_id) }
-        x_units[id] = (x_units[child_ids.first] + x_units[child_ids.last]) * 0.5
+        placed = child_ids.filter_map { |cid| x_units[cid] }
+        x_units[id] = placed.empty? ? cursor : (placed.first + placed.last) * 0.5
       end
 
       placing.delete(id)
