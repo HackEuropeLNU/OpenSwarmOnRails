@@ -29,11 +29,9 @@ export default class extends Controller {
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
     this.toggleHandler = this.togglePanel.bind(this)
-    this.actionTraceHandler = this.traceActionClick.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
-    window.addEventListener("worktree:action-click", this.actionTraceHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
 
@@ -71,7 +69,6 @@ export default class extends Controller {
     console.log(TAG, "disconnect")
     window.removeEventListener("worktree:open-terminal", this.openHandler)
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
-    window.removeEventListener("worktree:action-click", this.actionTraceHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
 
@@ -89,11 +86,12 @@ export default class extends Controller {
     this.panelVisible = true
 
     requestAnimationFrame(() => {
-      if (this.fitAddon && this.term) {
-        this.fitAddon.fit()
-        this.term.focus()
-      }
+      this.resizeTerminal()
+      if (this.term) this.term.focus()
     })
+
+    // Layout can settle a frame later after un-hiding; refit once more.
+    window.setTimeout(() => this.resizeTerminal(), 40)
   }
 
   hidePanel() {
@@ -189,6 +187,7 @@ export default class extends Controller {
       })
 
       this.term.focus()
+      this.resizeTerminal()
     } catch (err) {
       this.statusTarget.textContent = "error"
       console.error("Failed to create desktop terminal:", err)
@@ -318,9 +317,10 @@ export default class extends Controller {
   }
 
   resizeTerminal() {
-    if (!this.term || !this.fitAddon) return
+    if (!this.term || !this.fitAddon || !this.panelVisible) return
 
     this.fitAddon.fit()
+    this.term.refresh(0, this.term.rows - 1)
 
     if (isDesktop && this.sessionId) {
       console.log(TAG, "resizeTerminal -> desktop resize", { sessionId: this.sessionId, cols: this.term.cols, rows: this.term.rows })
@@ -381,10 +381,4 @@ export default class extends Controller {
     return bytes
   }
 
-  traceActionClick(event) {
-    const message = event?.detail?.message || "click (unknown-action)"
-    console.log(TAG, message)
-    if (!this.term) return
-    this.term.writeln(`\r\n${message}`)
-  }
 }
