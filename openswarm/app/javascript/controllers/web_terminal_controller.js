@@ -209,7 +209,11 @@ export default class extends Controller {
 
     debug("_openDesktopTerminal", { path, existingSessionId: this.sessionId })
 
-    const existingSession = this.desktopSessionsByPath.get(path)
+    let existingSession = this.desktopSessionsByPath.get(path)
+    if (!existingSession) {
+      existingSession = await this.findExistingDesktopSession(path)
+    }
+
     if (existingSession) {
       this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
       this.sessionId = existingSession.sessionId
@@ -268,6 +272,34 @@ export default class extends Controller {
       this.statusTarget.textContent = "error"
       this.activePath = null
       console.error("Failed to create desktop terminal:", err)
+    }
+  }
+
+  async findExistingDesktopSession(path) {
+    if (!isDesktop || typeof desktopTerminal.list !== "function") return null
+
+    try {
+      const sessions = await desktopTerminal.list()
+      if (!Array.isArray(sessions)) return null
+
+      const match = sessions.find((session) => {
+        if (!session || session.state === "exited") return false
+        return this.normalizePath(session.cwd) === path
+      })
+
+      if (!match?.sessionId) return null
+
+      const result = {
+        sessionId: match.sessionId,
+        shell: match.shell || ""
+      }
+
+      this.desktopSessionsByPath.set(path, result)
+      this.desktopPathBySessionId.set(match.sessionId, path)
+      return result
+    } catch (error) {
+      debug("findExistingDesktopSession failed", { path, error })
+      return null
     }
   }
 
