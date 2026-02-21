@@ -33,6 +33,39 @@ If your Rails app directory is named differently, override it:
 OPENSWARMONRAILS_DIR="openswarmonrails" make dev-backend
 ```
 
+### Desktop app (Electron, macOS)
+
+For local desktop testing on macOS, this repo includes an Electron shell in `desktop/`.
+
+1) Start backend + desktop shell together:
+
+```bash
+make electron-dev
+```
+
+2) Build a `.dmg`:
+
+```bash
+make electron-dmg
+```
+
+Artifacts are written to `desktop/dist/`.
+
+### Iterating on versions and cleanup
+
+- Clear desktop build artifacts and Electron caches:
+
+```bash
+make electron-clean
+```
+
+- Bump `version` in `desktop/package.json` before release-style builds so each DMG has a distinct filename.
+- Optional local app state reset between iterations:
+
+```bash
+rm -rf "$HOME/Library/Application Support/OpenSwarm"
+```
+
 Start backend + frontend together:
 
 ```bash
