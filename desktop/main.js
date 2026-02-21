@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
 const { TerminalManager } = require("./terminal-manager");
+const { execFile } = require("node:child_process");
 
 const TAG = "[DEBUG:main]";
 const DEBUG = process.env.OPENSWARM_DEBUG_TERMINAL === "1";
@@ -153,6 +154,39 @@ function setupTerminalIPC() {
     const sessions = terminalManager.list();
     debug("IPC terminal:list", { count: sessions.length });
     return sessions;
+  });
+
+  ipcMain.handle("dialog:pick-git-repo", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Open Git Project",
+      properties: ["openDirectory"]
+    });
+
+    if (result.canceled || !result.filePaths?.length) {
+      return { canceled: true };
+    }
+
+    const selectedPath = result.filePaths[0];
+    const repoPath = await resolveGitTopLevel(selectedPath);
+    if (!repoPath) {
+      return { canceled: false, error: "Selected folder is not inside a git repository" };
+    }
+
+    return { canceled: false, path: repoPath };
+  });
+}
+
+function resolveGitTopLevel(path) {
+  return new Promise((resolve) => {
+    execFile("git", ["-C", path, "rev-parse", "--show-toplevel"], (error, stdout) => {
+      if (error) {
+        resolve(null);
+        return;
+      }
+
+      const value = String(stdout || "").trim();
+      resolve(value || null);
+    });
   });
 }
 

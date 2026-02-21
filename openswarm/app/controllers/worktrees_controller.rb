@@ -71,6 +71,28 @@ class WorktreesController < ApplicationController
     render json: { error: "Internal error creating worktree: #{e.message}" }, status: :internal_server_error
   end
 
+  def open_project
+    requested_root = params[:repo_root].to_s.strip
+    return render json: { error: "Repository path is required" }, status: :unprocessable_entity if requested_root.empty?
+
+    resolved_root = git_toplevel_for(requested_root)
+    return render json: { error: "Selected folder is not a git repository" }, status: :unprocessable_entity unless resolved_root
+
+    roots = session_repo_roots
+    roots.delete(resolved_root)
+    roots.unshift(resolved_root)
+    session[:openswarm_repo_roots] = roots
+
+    render json: {
+      ok: true,
+      repo_name: File.basename(resolved_root),
+      redirect_url: worktrees_path(repo: File.basename(resolved_root))
+    }
+  rescue => e
+    Rails.logger.error("[open_project] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error opening project: #{e.message}" }, status: :internal_server_error
+  end
+
   def open_terminal
     repo_name = params[:repo].to_s
     worktree_id = params[:worktree_id].to_s
@@ -143,14 +165,17 @@ class WorktreesController < ApplicationController
   private
 
   def repo_roots
+    roots = []
+    roots.concat(session_repo_roots)
+
     configured_roots = ENV.fetch("OPENSWARM_REPO_ROOTS", "")
       .split(File::PATH_SEPARATOR)
       .map(&:strip)
       .reject(&:empty?)
 
-    return configured_roots if configured_roots.any?
-
-    [Rails.root.join("..").expand_path.to_s]
+    roots.concat(configured_roots)
+    roots << Rails.root.join("..").expand_path.to_s if roots.empty?
+    roots.uniq
   end
 
   def discover_repos
@@ -171,6 +196,29 @@ class WorktreesController < ApplicationController
         worktree_count: worktree_count
       }
     end
+  end
+
+  def session_repo_roots
+    Array(session[:openswarm_repo_roots])
+      .map(&:to_s)
+      .map(&:strip)
+      .reject(&:empty?)
+      .select { |root| File.directory?(root) }
+  end
+
+  def git_toplevel_for(path)
+    return nil unless File.directory?(path)
+
+    require "open3"
+    stdout, _stderr, status = Open3.capture3("git", "-C", path, "rev-parse", "--show-toplevel")
+    return nil unless status.success?
+
+    root = stdout.to_s.strip
+    return nil if root.empty?
+
+    root
+  rescue
+    nil
   end
 
   # Compute x,y positions and SVG edges for worktrees.
