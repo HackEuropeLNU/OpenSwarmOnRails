@@ -11,7 +11,12 @@
      data-graph-keyboard-open-project-url-value="<%= open_project_worktrees_path %>"
      data-graph-keyboard-create-url-value="<%= create_worktree_worktrees_path %>"
      data-graph-keyboard-delete-url-value="<%= delete_worktree_worktrees_path %>"
-     data-graph-keyboard-open-url-value="<%= open_terminal_worktrees_path %>">
+     data-graph-keyboard-open-url-value="<%= open_terminal_worktrees_path %>"
+     data-graph-keyboard-fetch-pull-url-value="<%= fetch_pull_parent_worktrees_path %>"
+     data-graph-keyboard-rebase-url-value="<%= rebase_onto_parent_worktrees_path %>"
+     data-graph-keyboard-commit-url-value="<%= commit_selected_worktrees_path %>"
+     data-graph-keyboard-push-url-value="<%= push_selected_worktrees_path %>"
+     data-graph-keyboard-merge-url-value="<%= merge_to_parent_worktrees_path %>">
 
   <%# ═══ Top Bar ═══ %>
   <header class="flex items-center justify-between px-5 py-2.5 border-b border-gray-200 bg-white shrink-0 z-10">
@@ -104,6 +109,7 @@
                     data-path="<%= wt.path %>"
                     data-formatted-path="<%= format_path(wt.path) %>"
                     data-branch="<%= wt.branch %>"
+                    data-parent-branch="<%= wt.parent_branch %>"
                     data-dirty="<%= wt.dirty %>"
                     data-state="<%= wt.state %>"
                     data-ahead="<%= wt.ahead %>"
@@ -303,7 +309,7 @@
             ["a", "create worktree"],
             ["o", "open terminal"],
             ["f", "fetch + pull"],
-            ["R", "rebase onto parent"],
+            ["F", "rebase onto parent"],
             ["c", "add + commit"],
             ["p", "push"],
             ["d", "delete worktree"],
@@ -322,7 +328,7 @@
       <%# ─── Footer ─── %>
       <div class="p-3 border-t border-gray-200 mt-auto">
         <div class="flex items-center justify-center gap-4 text-[10px] text-gray-400 font-mono">
-          <span><kbd class="text-gray-500">j</kbd>/<kbd class="text-gray-500">k</kbd> navigate</span>
+          <span><kbd class="text-gray-500">h</kbd>/<kbd class="text-gray-500">j</kbd>/<kbd class="text-gray-500">k</kbd>/<kbd class="text-gray-500">l</kbd> navigate</span>
           <span class="text-gray-300">·</span>
           <span><kbd class="text-gray-500">r</kbd> refresh</span>
           <span class="text-gray-300">·</span>

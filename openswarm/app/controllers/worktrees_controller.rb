@@ -162,7 +162,176 @@ class WorktreesController < ApplicationController
     render json: { error: "Internal error deleting worktree: #{e.message}" }, status: :internal_server_error
   end
 
+  def fetch_pull_parent
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    result = GitWorktreeService.fetch_pull_parent(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name, selected: worktree.id),
+      output: result.data[:output]
+    }
+  rescue => e
+    Rails.logger.error("[fetch_pull_parent] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error fetching/pulling worktree: #{e.message}" }, status: :internal_server_error
+  end
+
+  def rebase_onto_parent
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    if worktree.parent_branch.to_s.strip.empty?
+      return render json: { error: "Selected worktree has no parent branch" }, status: :unprocessable_entity
+    end
+
+    result = GitWorktreeService.rebase_onto_parent(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path,
+      parent_branch: worktree.parent_branch
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name, selected: worktree.id),
+      output: result.data[:output]
+    }
+  rescue => e
+    Rails.logger.error("[rebase_onto_parent] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error rebasing worktree: #{e.message}" }, status: :internal_server_error
+  end
+
+  def commit_selected
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+    message = params[:message].to_s.strip
+
+    return render json: { error: "Commit message is required" }, status: :unprocessable_entity if message.empty?
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    result = GitWorktreeService.commit_selected(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path,
+      message: message
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name, selected: worktree.id),
+      output: result.data[:output]
+    }
+  rescue => e
+    Rails.logger.error("[commit_selected] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error committing worktree: #{e.message}" }, status: :internal_server_error
+  end
+
+  def push_selected
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    result = GitWorktreeService.push_selected(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name, selected: worktree.id),
+      output: result.data[:output]
+    }
+  rescue => e
+    Rails.logger.error("[push_selected] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error pushing worktree: #{e.message}" }, status: :internal_server_error
+  end
+
+  def merge_to_parent
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    if worktree.parent_branch.to_s.strip.empty?
+      return render json: { error: "Selected worktree has no parent branch" }, status: :unprocessable_entity
+    end
+
+    result = GitWorktreeService.merge_to_parent(
+      repo_root: selected_repo[:root],
+      worktree_path: worktree.path,
+      parent_branch: worktree.parent_branch
+    )
+
+    unless result.success
+      return render json: { error: result.error }, status: :unprocessable_entity
+    end
+
+    selected_id = result.data[:parent_id] || worktree.id
+
+    render json: {
+      ok: true,
+      redirect_url: worktrees_path(repo: repo_name, selected: selected_id),
+      output: result.data[:output]
+    }
+  rescue => e
+    Rails.logger.error("[merge_to_parent] #{e.class}: #{e.message}\n#{Array(e.backtrace).join("\n")}")
+    render json: { error: "Internal error merging to parent: #{e.message}" }, status: :internal_server_error
+  end
+
   private
+
+  def resolve_repo_and_worktree(repo_name, worktree_id)
+    repos = discover_repos
+    selected_repo = repos.find { |r| r[:name] == repo_name }
+    unless selected_repo
+      render json: { error: "Repository not found" }, status: :not_found
+      return [nil, nil, nil]
+    end
+
+    discovery = GitWorktreeService.discover(selected_repo[:root])
+    unless discovery.success
+      render json: { error: discovery.error }, status: :unprocessable_entity
+      return [nil, nil, nil]
+    end
+
+    worktree = discovery.data[:worktrees].find { |wt| wt.id == worktree_id }
+    unless worktree
+      render json: { error: "Worktree not found" }, status: :unprocessable_entity
+      return [nil, nil, nil]
+    end
+
+    [selected_repo, worktree, discovery]
+  end
 
   def repo_roots
     roots = []
