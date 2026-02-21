@@ -10,6 +10,22 @@ This repo now includes a first-pass GUI scaffold so we can iterate on look-and-f
 
 ### Run locally
 
+Start backend + frontend together:
+
+```bash
+make dev
+```
+
+- Backend (Rails): `http://localhost:3000/`
+- Frontend scaffold: `http://localhost:4173/ui_scaffold/`
+
+You can also run each service separately:
+
+```bash
+make dev-backend
+make dev-frontend
+```
+
 From this repository root, run:
 
 ```bash
