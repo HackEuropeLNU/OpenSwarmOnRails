@@ -401,6 +401,33 @@
     </form>
   </div>
 
+  <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="commitModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+          data-action="submit->graph-keyboard#submitCommit click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">commit changes</h3>
+      <p class="text-[11px] text-gray-500 font-mono mb-3">
+        branch: <span class="text-gray-700" data-graph-keyboard-target="commitBranch"></span>
+      </p>
+      <label class="block text-[11px] text-gray-500 font-mono mb-1" for="commit-message">commit message</label>
+      <input id="commit-message"
+             type="text"
+             required
+             autocomplete="off"
+             class="w-full rounded-md border border-gray-300 px-2.5 py-2 text-[12px] font-mono text-gray-800 focus:outline-none focus:border-blue-400"
+             data-graph-keyboard-target="commitInput"
+             placeholder="feat: describe your change" />
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                data-action="click->graph-keyboard#cancelCommit">cancel</button>
+        <button type="submit"
+                class="px-2.5 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 text-[11px] font-mono hover:bg-emerald-100">commit</button>
+      </div>
+    </form>
+  </div>
+
   <%# ═══ Terminal overlay - visibility-based hide/show (no display:none) ═══ %>
   <div class="terminal-panel"
        data-visible="false"

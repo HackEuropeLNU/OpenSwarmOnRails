@@ -28,7 +28,10 @@ export default class extends Controller {
     "deleteModal",
     "deleteBranch",
     "deleteDirty",
-    "deleteForce"
+    "deleteForce",
+    "commitModal",
+    "commitBranch",
+    "commitInput"
   ]
 
   static values = {
@@ -55,6 +58,7 @@ export default class extends Controller {
     document.addEventListener("keydown", this.boundKeydown)
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
+    this.pendingCommitWorktreeId = null
     this.openTerminalInFlight = false
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
@@ -414,25 +418,54 @@ export default class extends Controller {
     )
   }
 
-  async commitSelected() {
-    this.traceAction("commit-selected")
+  commitSelected() {
+    this.traceAction("open-commit-dialog")
     const selectedNode = this.selectedNodeTarget()
     if (!selectedNode) return
 
-    const message = window.prompt("Commit message")
-    if (message === null) return
-    const trimmed = message.trim()
-    if (!trimmed) {
+    this.openCommitDialog(selectedNode)
+  }
+
+  openCommitDialog(node) {
+    const worktreeId = node.dataset.nodeId
+    if (!worktreeId || !this.hasCommitModalTarget) return
+
+    const branch = node.dataset.branch || "this worktree"
+
+    this.pendingCommitWorktreeId = worktreeId
+    this.commitBranchTarget.textContent = branch
+    this.commitInputTarget.value = ""
+    this.commitModalTarget.classList.remove("hidden")
+    this.commitInputTarget.focus()
+  }
+
+  cancelCommit(event) {
+    event?.preventDefault?.()
+    this.closeDialogs()
+  }
+
+  async submitCommit(event) {
+    event.preventDefault()
+    this.traceAction("submit-commit")
+
+    const worktreeId = this.pendingCommitWorktreeId
+    const trimmed = this.commitInputTarget.value.trim()
+
+    if (!worktreeId || !trimmed) {
       window.alert("Commit message is required")
       return
     }
 
-    await this.performNodeAction(
+    const payload = await this.performNodeAction(
       this.commitUrlValue,
-      selectedNode.dataset.nodeId,
+      worktreeId,
       "Commit is not configured on this page",
       { message: trimmed }
     )
+
+    if (payload) {
+      this.closeDialogs()
+    }
   }
 
   async pushSelected() {
@@ -578,9 +611,9 @@ export default class extends Controller {
   async performNodeAction(url, worktreeId, missingConfigMessage, extraPayload = {}) {
     if (!url || !this.repoValue) {
       window.alert(missingConfigMessage)
-      return
+      return null
     }
-    if (!worktreeId) return
+    if (!worktreeId) return null
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
@@ -604,7 +637,7 @@ export default class extends Controller {
       const payload = await this.parseJsonResponse(response)
       if (!response.ok) {
         window.alert(payload.error || payload.raw || "Action failed")
-        return
+        return null
       }
 
       if (payload.redirect_url) {
@@ -612,8 +645,10 @@ export default class extends Controller {
       } else {
         this.refresh()
       }
+      return payload
     } catch (error) {
       window.alert(error?.message || "Action failed")
+      return null
     }
   }
 
@@ -691,8 +726,12 @@ export default class extends Controller {
   closeDialogs() {
     this.createModalTarget.classList.add("hidden")
     this.deleteModalTarget.classList.add("hidden")
+    if (this.hasCommitModalTarget) {
+      this.commitModalTarget.classList.add("hidden")
+    }
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
+    this.pendingCommitWorktreeId = null
   }
 
   closeDialogBackdrop(event) {
@@ -703,7 +742,8 @@ export default class extends Controller {
 
   isModalOpen() {
     return !this.createModalTarget.classList.contains("hidden") ||
-      !this.deleteModalTarget.classList.contains("hidden")
+      !this.deleteModalTarget.classList.contains("hidden") ||
+      (this.hasCommitModalTarget && !this.commitModalTarget.classList.contains("hidden"))
   }
 
   isTerminalSessionActive(event) {
