@@ -82,7 +82,7 @@
         <% @layout[:nodes].each do |node_data| %>
           <% wt = node_data[:worktree] %>
           <% is_selected = wt.id == @selected_id %>
-          <div class="absolute group"
+          <div class="absolute group pb-12"
                style="left: <%= node_data[:x] %>px; top: <%= node_data[:y] %>px; width: <%= node_data[:width] %>px;">
             <button type="button"
                     class="w-full cursor-pointer transition-all duration-200 ease-out focus:outline-none"
