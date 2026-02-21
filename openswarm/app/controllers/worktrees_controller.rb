@@ -126,17 +126,43 @@ class WorktreesController < ApplicationController
   end
 
   # Compute x,y positions and SVG edges for a tree of worktrees.
-  # Uses a layered top-down layout with centered children.
+  # Uses a layered top-down layout with centered siblings.
   def compute_layout(tree, worktrees)
     return { nodes: [], edges: [], width: 1000, height: 400 } if tree.empty? || worktrees.empty?
 
-    nodes = []
-    edges = []
+    worktree_by_id = worktrees.index_by(&:id)
+    levels = Hash.new { |h, k| h[k] = [] }
+    edge_pairs = []
+    visited = {}
 
-    # Build levels: root is level 0, children are level 1
-    root_wt = worktrees.find { |wt| wt.id == tree[:id] }
-    children_ids = (tree[:children] || []).map { |c| c[:id] }
-    children_wts = worktrees.select { |wt| children_ids.include?(wt.id) }
+    walk = nil
+    walk = lambda do |node, depth|
+      return unless node.is_a?(Hash)
+
+      node_id = node[:id]
+      return if node_id.nil? || visited[node_id]
+
+      visited[node_id] = true
+      levels[depth] << node_id
+
+      (node[:children] || []).each do |child|
+        child_id = child[:id]
+        edge_pairs << [node_id, child_id] if child_id
+        walk.call(child, depth + 1)
+      end
+    end
+
+    walk.call(tree, 0)
+
+    missing_ids = worktree_by_id.keys - visited.keys
+    missing_ids.each do |id|
+      levels[1] << id
+      edge_pairs << [tree[:id], id]
+    end
+
+    all_levels = levels.keys.sort.map { |depth| levels[depth].uniq }
+
+    nodes = []
 
     # Layout params — generous spacing for premium look
     node_width = 200
@@ -147,14 +173,14 @@ class WorktreesController < ApplicationController
     canvas_padding_y = 60
 
     # Calculate positions
-    all_levels = [[root_wt].compact, children_wts]
-    all_levels.reject!(&:empty?)
-
-    max_count = all_levels.map(&:length).max || 1
+    max_count = [all_levels.map(&:length).max || 1, 1].max
     canvas_width = [max_count * (node_width + horizontal_gap) - horizontal_gap + canvas_padding_x * 2, 900].max
     canvas_height = all_levels.length * level_gap + node_height + canvas_padding_y * 2
 
-    all_levels.each_with_index do |level_nodes, level_idx|
+    all_levels.each_with_index do |level_ids, level_idx|
+      level_nodes = level_ids.filter_map { |id| worktree_by_id[id] }
+      next if level_nodes.empty?
+
       total_width = level_nodes.length * node_width + (level_nodes.length - 1) * horizontal_gap
       start_x = (canvas_width - total_width) / 2.0
 
@@ -175,26 +201,23 @@ class WorktreesController < ApplicationController
       end
     end
 
-    # Build edges from root to each child
-    root_node = nodes.find { |n| n[:id] == tree[:id] }
-    if root_node
-      children_ids.each do |child_id|
-        child_node = nodes.find { |n| n[:id] == child_id }
-        next unless child_node
+    node_by_id = nodes.index_by { |n| n[:id] }
+    edges = edge_pairs.filter_map do |from_id, to_id|
+      from_node = node_by_id[from_id]
+      to_node = node_by_id[to_id]
+      next unless from_node && to_node
 
-        # Smooth cubic bezier from bottom-center of parent to top-center of child
-        x1 = root_node[:center_x]
-        y1 = root_node[:y] + root_node[:height]
-        x2 = child_node[:center_x]
-        y2 = child_node[:y]
-        ctrl_offset = (y2 - y1) * 0.5
+      x1 = from_node[:center_x]
+      y1 = from_node[:y] + from_node[:height]
+      x2 = to_node[:center_x]
+      y2 = to_node[:y]
+      ctrl_offset = (y2 - y1) * 0.5
 
-        edges << {
-          path: "M#{x1} #{y1} C#{x1} #{y1 + ctrl_offset}, #{x2} #{y2 - ctrl_offset}, #{x2} #{y2}",
-          from: root_node[:id],
-          to: child_node[:id]
-        }
-      end
+      {
+        path: "M#{x1} #{y1} C#{x1} #{y1 + ctrl_offset}, #{x2} #{y2 - ctrl_offset}, #{x2} #{y2}",
+        from: from_id,
+        to: to_id
+      }
     end
 
     { nodes: nodes, edges: edges, width: canvas_width.to_i, height: canvas_height.to_i }
