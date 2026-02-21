@@ -25,6 +25,7 @@ class GitWorktreeService
       return Result.new(success: false, error: "Failed to list worktrees") unless porcelain
 
       worktrees = parse_porcelain(porcelain, main_root.strip)
+      assign_parent_branches!(worktrees, main_root.strip)
       enrich_worktrees!(worktrees, main_root.strip)
 
       Result.new(success: true, data: {
@@ -187,8 +188,70 @@ class GitWorktreeService
         ahead: 0,
         behind: 0,
         state: is_main ? "main" : "committed",
-        parent_branch: is_main ? nil : "main"
+        parent_branch: nil
       )
+    end
+
+    def assign_parent_branches!(worktrees, main_root)
+      root = worktrees.find { |wt| wt.path == main_root }
+      root_branch = root&.branch || "main"
+
+      worktrees.each do |wt|
+        next if wt == root
+        next if wt.detached
+
+        inferred = infer_parent_branch(main_root, wt, worktrees)
+        wt.parent_branch = inferred || root_branch
+      end
+    end
+
+    def infer_parent_branch(main_root, worktree, worktrees)
+      reflog_parent = parent_from_reflog(main_root, worktree.branch)
+      return reflog_parent if reflog_parent
+
+      infer_parent_from_merge_base(worktree, worktrees)
+    end
+
+    def parent_from_reflog(main_root, branch)
+      reflog = git(main_root, "reflog", "show", "--format=%gs", "--reverse", "refs/heads/#{branch}")
+      return nil unless reflog
+
+      creation_line = reflog.lines.map(&:strip).find { |line| line.include?("Created from") }
+      return nil unless creation_line
+
+      match = creation_line.match(/Created from\s+(.+)\z/)
+      return nil unless match
+
+      candidate = match[1].to_s.strip
+      return nil if candidate.empty?
+      return nil if candidate == "HEAD"
+      return nil if candidate.start_with?("HEAD@{")
+
+      candidate.sub(%r{\Arefs/heads/}, "")
+    end
+
+    def infer_parent_from_merge_base(worktree, worktrees)
+      candidates = worktrees.reject do |candidate|
+        candidate.branch == worktree.branch || candidate.detached || candidate.branch == "(detached)"
+      end
+
+      best = nil
+
+      candidates.each do |candidate|
+        rev_list = git(worktree.path, "rev-list", "--left-right", "--count", "#{worktree.branch}...#{candidate.branch}")
+        next unless rev_list
+
+        ahead, behind = rev_list.strip.split(/\s+/).map(&:to_i)
+        next unless ahead
+        next unless behind
+
+        score = [behind, -ahead]
+        if best.nil? || (score <=> best[:score]) == -1
+          best = { branch: candidate.branch, score: score }
+        end
+      end
+
+      best&.dig(:branch)
     end
 
     # Enrich worktrees with dirty status, ahead/behind counts
@@ -240,20 +303,36 @@ class GitWorktreeService
       end
     end
 
-    # Build a simple tree structure: { node: worktree, children: [...] }
-    # For now, we treat the first worktree (main) as root and all others as children.
-    # A smarter version could use branch naming or merge-base analysis.
+    # Build nested tree structure based on parent_branch links.
     def build_tree(worktrees)
       return {} if worktrees.empty?
 
-      root = worktrees.find { |wt| wt.parent_branch.nil? } || worktrees.first
-      children = worktrees.reject { |wt| wt == root }
+      by_branch = worktrees.each_with_object({}) { |wt, acc| acc[wt.branch] = wt }
+      root = worktrees.find { |wt| wt.parent_branch.nil? } || by_branch["main"] || worktrees.first
+      children_by_id = Hash.new { |h, k| h[k] = [] }
 
-      {
-        id: root.id,
-        branch: root.branch,
-        children: children.map { |c| { id: c.id, branch: c.branch, children: [] } }
-      }
+      worktrees.each do |wt|
+        next if wt == root
+
+        parent = by_branch[wt.parent_branch]
+        parent = root if parent.nil? || parent == wt
+        children_by_id[parent.id] << wt
+      end
+
+      build_node = nil
+      visited = {}
+      build_node = lambda do |wt|
+        return { id: wt.id, branch: wt.branch, children: [] } if visited[wt.id]
+
+        visited[wt.id] = true
+        {
+          id: wt.id,
+          branch: wt.branch,
+          children: children_by_id[wt.id].map { |child| build_node.call(child) }
+        }
+      end
+
+      build_node.call(root)
     end
   end
 end
