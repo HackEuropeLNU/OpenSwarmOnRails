@@ -135,7 +135,11 @@ export default class extends Controller {
           if (!this.term) return
 
           if (message.type === "output") {
-            this.term.write(message.data)
+            if (message.encoding === "base64") {
+              this.term.write(this.decodeBase64(message.data || ""))
+            } else {
+              this.term.write(message.data || "")
+            }
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
           }
@@ -169,5 +173,16 @@ export default class extends Controller {
       this.fitAddon = null
       this.terminalTarget.innerHTML = ""
     }
+  }
+
+  decodeBase64(data) {
+    const binary = window.atob(data)
+    const bytes = new Uint8Array(binary.length)
+
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+
+    return bytes
   }
 }
