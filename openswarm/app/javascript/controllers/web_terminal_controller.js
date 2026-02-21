@@ -18,6 +18,11 @@ const ACK_BATCH_SIZE = 5000
 const OPENCODE_SPINNER_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/
 const OPENCODE_IDLE_TIMEOUT_MS = 1500
 const SHELL_PROMPT_REGEX = /(?:\r?\n|^)[^\r\n]*[%$#] $/
+const TOKEN_RATE_PATTERNS = [
+  /(\d+(?:\.\d+)?)\s*(?:tokens?|tok)\s*\/\s*s\b/gi,
+  /\b(?:tokens?|tok)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
+  /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
+]
 
 export default class extends Controller {
   static targets = [
@@ -53,7 +58,9 @@ export default class extends Controller {
     this.trackingOpencode = false
     this.inputBuffer = ""
     this.outputTail = ""
-    this.textDecoder = new TextDecoder()
+    this.outputParseCarry = ""
+    this.sessionMetaById = new Map()
+    this.pendingSessionMeta = null
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -86,6 +93,7 @@ export default class extends Controller {
         }
         this.recordOutputActivity(data)
         this.term.write(data)
+        this.processTerminalOutput(data, sessionId)
 
         // Flow control ACK
         this.unackedChars += data.length
@@ -106,6 +114,7 @@ export default class extends Controller {
         if (sessionId !== this.sessionId) return
         debug("received terminal:exit", { sessionId })
         this.statusTarget.textContent = "exited"
+        this.sessionMetaById.delete(sessionId)
         this.sessionId = null
         this.activePath = null
         this.resetOpencodeTracking()
@@ -187,6 +196,7 @@ export default class extends Controller {
   openFromEvent(event) {
     const payload = event.detail || {}
     debug("openFromEvent", payload)
+    this.pendingSessionMeta = this.buildSessionMeta(payload)
 
     // Desktop mode: payload has `path` from the worktree, we create PTY directly
     if (isDesktop) {
@@ -256,6 +266,9 @@ export default class extends Controller {
       this.activePath = path
       this.acceptDesktopDataBeforeSessionId = false
       this.pendingDesktopSessionId = null
+      if (this.pendingSessionMeta) {
+        this.sessionMetaById.set(result.sessionId, this.pendingSessionMeta)
+      }
       this.shellTarget.textContent = result.shell
       this.statusTarget.textContent = "connected"
       this.desktopSessionsByPath.set(path, { sessionId: result.sessionId, shell: result.shell })
@@ -336,6 +349,8 @@ export default class extends Controller {
     this.pathTarget.textContent = payload.path || ""
     this.shellTarget.textContent = payload.shell || ""
     this.statusTarget.textContent = "connecting"
+    this.pendingSessionMeta = this.buildSessionMeta(payload)
+    this.sessionMetaById.set(payload.session_id, this.pendingSessionMeta)
 
     this.showPanel()
     this.setupTerminal()
@@ -421,17 +436,20 @@ export default class extends Controller {
 
           if (message.type === "output") {
             if (message.encoding === "base64") {
-              const bytes = this.decodeBase64(message.data || "")
-              const text = this.textDecoder.decode(bytes)
-              this.recordOutputActivity(text)
-              this.term.write(bytes)
+              const decoded = this.decodeBase64(message.data || "")
+              const output = this.bytesToString(decoded)
+              this.term.write(output)
+              this.recordOutputActivity(output)
+              this.processTerminalOutput(output, this.sessionId)
             } else {
-              const text = message.data || ""
-              this.recordOutputActivity(text)
-              this.term.write(text)
+              const output = message.data || ""
+              this.term.write(output)
+              this.recordOutputActivity(output)
+              this.processTerminalOutput(output, this.sessionId)
             }
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
+            if (this.sessionId) this.sessionMetaById.delete(this.sessionId)
             this.sessionId = null
             this.resetOpencodeTracking()
             this.updateBackgroundIndicator()
@@ -482,23 +500,24 @@ export default class extends Controller {
 
   destroyTerminal({ killRemote = true, closeRemoteBrowser = false } = {}) {
     debug("destroyTerminal", { isDesktop, sessionId: this.sessionId })
-    const previousSessionId = this.sessionId
-    const previousPath = this.activePath
-
+    const closingSessionId = this.sessionId
     // Desktop: kill PTY via IPC
-    if (killRemote && isDesktop && previousSessionId) {
-      desktopTerminal.kill(previousSessionId)
-      const mappedPath = this.desktopPathBySessionId.get(previousSessionId) || previousPath
+    if (killRemote && isDesktop && closingSessionId) {
+      desktopTerminal.kill(closingSessionId)
+      const mappedPath = this.desktopPathBySessionId.get(closingSessionId) || this.activePath
       if (mappedPath) this.desktopSessionsByPath.delete(mappedPath)
-      this.desktopPathBySessionId.delete(previousSessionId)
+      this.desktopPathBySessionId.delete(closingSessionId)
     }
 
     this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
+    if (closingSessionId) this.sessionMetaById.delete(closingSessionId)
     this.sessionId = null
     this.activePath = null
     this.unackedChars = 0
     this.acceptDesktopDataBeforeSessionId = false
     this.pendingDesktopSessionId = null
+    this.pendingSessionMeta = null
+    this.outputParseCarry = ""
     if (!this.panelVisible) {
       document.documentElement.classList.remove("overflow-hidden")
     }
@@ -530,6 +549,75 @@ export default class extends Controller {
     }
 
     return bytes
+  }
+
+  bytesToString(bytes) {
+    if (!bytes || bytes.length === 0) return ""
+    return new TextDecoder("utf-8").decode(bytes)
+  }
+
+  buildSessionMeta(payload) {
+    return {
+      worktreeId: payload.worktreeId || null,
+      branch: payload.branch || null,
+      path: payload.path || null
+    }
+  }
+
+  processTerminalOutput(output, sessionId) {
+    if (!output) return
+
+    const normalized = this.normalizeOutputForParsing(output)
+    this.outputParseCarry = `${this.outputParseCarry}${normalized}`.slice(-3000)
+
+    const matchedRates = []
+    TOKEN_RATE_PATTERNS.forEach((pattern) => {
+      pattern.lastIndex = 0
+      let match
+      while ((match = pattern.exec(this.outputParseCarry)) !== null) {
+        const rate = Number(match[1])
+        if (Number.isFinite(rate) && rate >= 0) {
+          matchedRates.push(rate)
+        }
+      }
+    })
+
+    if (matchedRates.length === 0) return
+
+    const latestRate = matchedRates[matchedRates.length - 1]
+    const sessionMeta = this.resolveSessionMeta(sessionId)
+    window.dispatchEvent(
+      new CustomEvent("worktree:token-rate", {
+        detail: {
+          ...sessionMeta,
+          sessionId,
+          tokensPerSecond: latestRate,
+          timestamp: Date.now()
+        }
+      })
+    )
+  }
+
+  resolveSessionMeta(sessionId) {
+    if (sessionId && this.sessionMetaById.has(sessionId)) {
+      return this.sessionMetaById.get(sessionId)
+    }
+
+    if (this.pendingSessionMeta) {
+      return this.pendingSessionMeta
+    }
+
+    return {
+      worktreeId: null,
+      branch: null,
+      path: this.pathTarget.textContent || null
+    }
+  }
+
+  normalizeOutputForParsing(output) {
+    return output
+      .replace(/[\u001b\u009b][[\]()#;?]*(?:\d{1,4}(?:;\d{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
+      .replace(/\r(?!\n)/g, "\n")
   }
 
   traceActionClick(event) {

@@ -21,6 +21,8 @@ export default class extends Controller {
     "detailsAhead",
     "detailsBehind",
     "listItem",
+    "tokenLegendRows",
+    "tokenLegendEmpty",
     "createModal",
     "createInput",
     "createParent",
@@ -51,15 +53,26 @@ export default class extends Controller {
     this.pendingCreateParentId = null
     this.pendingDeleteWorktreeId = null
     this.openTerminalInFlight = false
+    this.worktreeMetaById = new Map()
+    this.worktreeIdByPath = new Map()
+    this.tokenRateByWorktree = this.loadTokenRates()
+    this.boundTokenRateUpdate = this.handleTokenRateUpdate.bind(this)
+    window.addEventListener("worktree:token-rate", this.boundTokenRateUpdate)
+    this.indexWorktreeMetadata()
 
     const initialId = this.selectedValue || this.nodeTargets[0]?.dataset.nodeId
     if (initialId) {
       this.selectNodeById(initialId, { syncUrl: false })
+    } else {
+      this.renderSelectedState()
     }
+
+    this.renderTokenLegend()
   }
 
   disconnect() {
     document.removeEventListener("keydown", this.boundKeydown)
+    window.removeEventListener("worktree:token-rate", this.boundTokenRateUpdate)
   }
 
   handleKeydown(event) {
@@ -508,12 +521,15 @@ export default class extends Controller {
   async openTerminal(worktreeId) {
     if (!worktreeId) return
 
+    const node = this.nodeTargets.find((targetNode) => targetNode.dataset.nodeId === worktreeId)
+    const nodePath = node?.dataset.path || ""
+    const nodeBranch = node?.dataset.branch || ""
+
     // Desktop mode: resolve path from DOM and open PTY directly (skip Rails PTY)
     const isDesktop = typeof window.desktopShell?.terminal?.create === "function"
     debug("openTerminal called", { worktreeId, isDesktop })
     if (isDesktop) {
-      const node = this.nodeTargets.find((n) => n.dataset.nodeId === worktreeId)
-      const path = node?.dataset.path
+      const path = nodePath
       debug("desktop path lookup", { foundNode: !!node, path })
       if (!path) {
         console.error(TAG, "desktop path missing for node", { worktreeId })
@@ -522,7 +538,12 @@ export default class extends Controller {
 
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
-          detail: { path, worktree_id: worktreeId }
+          detail: {
+            path,
+            worktree_id: worktreeId,
+            worktreeId,
+            branch: nodeBranch
+          }
         })
       )
       debug("dispatched worktree:open-terminal", { path })
@@ -563,7 +584,12 @@ export default class extends Controller {
       debug("browser open terminal success", payload)
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
-          detail: payload
+          detail: {
+            ...payload,
+            worktreeId,
+            path: payload.path || nodePath,
+            branch: nodeBranch
+          }
         })
       )
     } catch (_error) {
@@ -571,5 +597,142 @@ export default class extends Controller {
     } finally {
       this.openTerminalInFlight = false
     }
+  }
+
+  tokenStorageKey() {
+    const repo = this.repoValue || "default"
+    return `openswarm:token-rates:${repo}`
+  }
+
+  loadTokenRates() {
+    try {
+      const raw = window.sessionStorage.getItem(this.tokenStorageKey())
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === "object" ? parsed : {}
+    } catch (_error) {
+      return {}
+    }
+  }
+
+  persistTokenRates() {
+    try {
+      window.sessionStorage.setItem(this.tokenStorageKey(), JSON.stringify(this.tokenRateByWorktree))
+    } catch (_error) {
+      // ignore storage failures
+    }
+  }
+
+  indexWorktreeMetadata() {
+    this.worktreeMetaById.clear()
+    this.worktreeIdByPath.clear()
+
+    this.nodeTargets.forEach((node) => {
+      const id = node.dataset.nodeId
+      if (!id) return
+
+      const meta = {
+        id,
+        branch: node.dataset.branch || id,
+        path: node.dataset.path || ""
+      }
+
+      this.worktreeMetaById.set(id, meta)
+      if (meta.path) this.worktreeIdByPath.set(meta.path, id)
+
+      if (!this.tokenRateByWorktree[id]) {
+        this.tokenRateByWorktree[id] = {
+          tps: 0,
+          updatedAt: null
+        }
+      }
+    })
+
+    Object.keys(this.tokenRateByWorktree).forEach((id) => {
+      if (!this.worktreeMetaById.has(id)) {
+        delete this.tokenRateByWorktree[id]
+      }
+    })
+
+    this.persistTokenRates()
+  }
+
+  handleTokenRateUpdate(event) {
+    const detail = event.detail || {}
+    const worktreeId = this.resolveWorktreeId(detail)
+    if (!worktreeId || !this.worktreeMetaById.has(worktreeId)) return
+
+    const numericRate = Number(detail.tokensPerSecond)
+    if (!Number.isFinite(numericRate) || numericRate < 0) return
+
+    this.tokenRateByWorktree[worktreeId] = {
+      tps: numericRate,
+      updatedAt: detail.timestamp || Date.now()
+    }
+
+    this.persistTokenRates()
+    this.renderTokenLegend()
+  }
+
+  resolveWorktreeId(detail) {
+    if (detail.worktreeId && this.worktreeMetaById.has(detail.worktreeId)) {
+      return detail.worktreeId
+    }
+
+    if (detail.path && this.worktreeIdByPath.has(detail.path)) {
+      return this.worktreeIdByPath.get(detail.path)
+    }
+
+    return null
+  }
+
+  renderTokenLegend() {
+    if (!this.hasTokenLegendRowsTarget || !this.hasTokenLegendEmptyTarget) return
+
+    const rows = []
+    this.worktreeMetaById.forEach((meta) => {
+      const metric = this.tokenRateByWorktree[meta.id] || { tps: 0 }
+      rows.push({
+        id: meta.id,
+        branch: meta.branch,
+        tps: Number(metric.tps) || 0
+      })
+    })
+
+    rows.sort((left, right) => right.tps - left.tps)
+    const maxRate = rows.reduce((max, row) => Math.max(max, row.tps), 0)
+
+    this.tokenLegendRowsTarget.innerHTML = ""
+    this.hasTokenLegendEmptyTarget && this.tokenLegendEmptyTarget.classList.toggle("hidden", rows.length > 0)
+
+    rows.forEach((row) => {
+      const ratio = maxRate > 0 ? row.tps / maxRate : 0
+      const rowElement = document.createElement("div")
+      rowElement.className = "grid grid-cols-[minmax(0,1fr)_70px_34px] items-center gap-2"
+
+      const nameElement = document.createElement("span")
+      nameElement.className = "truncate text-[10px] text-slate-300 font-mono"
+      nameElement.textContent = row.branch
+
+      const trackElement = document.createElement("span")
+      trackElement.className = "h-1.5 rounded-full bg-slate-800/90 overflow-hidden"
+
+      const fillElement = document.createElement("span")
+      fillElement.className = "block h-full rounded-full bg-cyan-400/90"
+      fillElement.style.width = `${Math.max(4, Math.round(ratio * 100))}%`
+      if (row.tps === 0) {
+        fillElement.style.width = "0%"
+      }
+
+      const ratioElement = document.createElement("span")
+      ratioElement.className = "text-right text-[10px] text-slate-400 font-mono"
+      ratioElement.textContent = ratio.toFixed(2)
+
+      trackElement.appendChild(fillElement)
+      rowElement.appendChild(nameElement)
+      rowElement.appendChild(trackElement)
+      rowElement.appendChild(ratioElement)
+      this.tokenLegendRowsTarget.appendChild(rowElement)
+    })
   }
 }
