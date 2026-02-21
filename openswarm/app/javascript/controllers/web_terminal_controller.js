@@ -4,6 +4,10 @@ import { FitAddon } from "@xterm/addon-fit"
 import consumer from "cable_consumer"
 
 const TAG = "[DEBUG:web_terminal]"
+const DEBUG = false
+const debug = (...args) => {
+  if (DEBUG) console.log(TAG, ...args)
+}
 
 // ── Detect desktop mode (Electron with node-pty IPC) ──
 const desktopTerminal = window.desktopShell?.terminal
@@ -16,7 +20,7 @@ export default class extends Controller {
   static targets = ["panel", "terminal", "path", "shell", "status"]
 
   connect() {
-    console.log(TAG, "connect", { isDesktop })
+    debug("connect", { isDesktop })
     this.subscription = null  // ActionCable subscription (browser mode)
     this.term = null
     this.fitAddon = null
@@ -29,28 +33,26 @@ export default class extends Controller {
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
     this.toggleHandler = this.togglePanel.bind(this)
-    this.actionTraceHandler = this.traceActionClick.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
-    window.addEventListener("worktree:action-click", this.actionTraceHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
 
     // Desktop: subscribe to PTY events globally
     if (isDesktop) {
-      console.log(TAG, "desktop mode: subscribing to IPC events")
+      debug("desktop mode: subscribing to IPC events")
       const offData = desktopTerminal.onData((sessionId, data) => {
         if (sessionId !== this.sessionId || !this.term) return
         if (this.unackedChars === 0) {
-          console.log(TAG, "first terminal:data chunk", { sessionId, len: data.length, preview: data.slice(0, 80) })
+          debug("first terminal:data chunk", { sessionId, len: data.length, preview: data.slice(0, 80) })
         }
         this.term.write(data)
 
         // Flow control ACK
         this.unackedChars += data.length
         if (this.unackedChars >= ACK_BATCH_SIZE) {
-          console.log(TAG, "sending ACK", { sessionId, charCount: this.unackedChars })
+          debug("sending ACK", { sessionId, charCount: this.unackedChars })
           desktopTerminal.ack(sessionId, this.unackedChars)
           this.unackedChars = 0
         }
@@ -58,7 +60,7 @@ export default class extends Controller {
 
       const offExit = desktopTerminal.onExit((sessionId, _exitCode) => {
         if (sessionId !== this.sessionId) return
-        console.log(TAG, "received terminal:exit", { sessionId })
+        debug("received terminal:exit", { sessionId })
         this.statusTarget.textContent = "exited"
         this.sessionId = null
       })
@@ -68,10 +70,9 @@ export default class extends Controller {
   }
 
   disconnect() {
-    console.log(TAG, "disconnect")
+    debug("disconnect")
     window.removeEventListener("worktree:open-terminal", this.openHandler)
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
-    window.removeEventListener("worktree:action-click", this.actionTraceHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
 
@@ -84,7 +85,7 @@ export default class extends Controller {
   // ── Show / hide without destroying the PTY ──
 
   showPanel() {
-    console.log(TAG, "showPanel")
+    debug("showPanel")
     this.panelTarget.classList.remove("hidden")
     this.panelVisible = true
 
@@ -97,7 +98,7 @@ export default class extends Controller {
   }
 
   hidePanel() {
-    console.log(TAG, "hidePanel")
+    debug("hidePanel")
     this.panelTarget.classList.add("hidden")
     this.panelVisible = false
   }
@@ -124,7 +125,7 @@ export default class extends Controller {
 
   openFromEvent(event) {
     const payload = event.detail || {}
-    console.log(TAG, "openFromEvent", payload)
+    debug("openFromEvent", payload)
 
     // Desktop mode: payload has `path` from the worktree, we create PTY directly
     if (isDesktop) {
@@ -144,11 +145,11 @@ export default class extends Controller {
       return
     }
 
-    console.log(TAG, "_openDesktopTerminal", { path, existingSessionId: this.sessionId })
+    debug("_openDesktopTerminal", { path, existingSessionId: this.sessionId })
 
     // If we already have a live session, just re-show
     if (this.sessionId) {
-      console.log(TAG, "session already exists; re-show panel", { sessionId: this.sessionId })
+      debug("session already exists; re-show panel", { sessionId: this.sessionId })
       this.showPanel()
       return
     }
@@ -163,11 +164,11 @@ export default class extends Controller {
 
     const cols = this.term?.cols || 80
     const rows = this.term?.rows || 24
-    console.log(TAG, "creating desktop terminal", { path, cols, rows })
+    debug("creating desktop terminal", { path, cols, rows })
 
     try {
       const result = await desktopTerminal.create({ cwd: path, cols, rows })
-      console.log(TAG, "desktopTerminal.create result", result)
+      debug("desktopTerminal.create result", result)
       this.sessionId = result.sessionId
       this.shellTarget.textContent = result.shell
       this.statusTarget.textContent = "connected"
@@ -176,7 +177,7 @@ export default class extends Controller {
       this.term.onData((data) => {
         if (!this.sessionId) return
         if (data && data.trim()) {
-          console.log(TAG, "term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
+          debug("term.onData (user input)", { len: data.length, preview: data.slice(0, 60) })
         }
         desktopTerminal.write(this.sessionId, data)
       })
@@ -184,7 +185,7 @@ export default class extends Controller {
       // Wire resize: xterm resize -> IPC -> PTY
       this.term.onResize(({ cols, rows }) => {
         if (!this.sessionId) return
-        console.log(TAG, "term.onResize", { sessionId: this.sessionId, cols, rows })
+        debug("term.onResize", { sessionId: this.sessionId, cols, rows })
         desktopTerminal.resize(this.sessionId, cols, rows)
       })
 
@@ -224,7 +225,7 @@ export default class extends Controller {
   // ── Terminal setup (shared between desktop and browser) ──
 
   setupTerminal() {
-    console.log(TAG, "setupTerminal")
+    debug("setupTerminal")
     if (this.term) {
       this.term.dispose()
       this.term = null
@@ -323,7 +324,7 @@ export default class extends Controller {
     this.fitAddon.fit()
 
     if (isDesktop && this.sessionId) {
-      console.log(TAG, "resizeTerminal -> desktop resize", { sessionId: this.sessionId, cols: this.term.cols, rows: this.term.rows })
+      debug("resizeTerminal -> desktop resize", { sessionId: this.sessionId, cols: this.term.cols, rows: this.term.rows })
       desktopTerminal.resize(this.sessionId, this.term.cols, this.term.rows)
     } else if (this.subscription) {
       this.subscription.perform("resize", { cols: this.term.cols, rows: this.term.rows })
@@ -344,7 +345,7 @@ export default class extends Controller {
   }
 
   destroyTerminal({ killRemote = true, closeRemoteBrowser = false } = {}) {
-    console.log(TAG, "destroyTerminal", { isDesktop, sessionId: this.sessionId })
+    debug("destroyTerminal", { isDesktop, sessionId: this.sessionId })
     // Desktop: kill PTY via IPC
     if (killRemote && isDesktop && this.sessionId) {
       desktopTerminal.kill(this.sessionId)
@@ -381,10 +382,4 @@ export default class extends Controller {
     return bytes
   }
 
-  traceActionClick(event) {
-    const message = event?.detail?.message || "click (unknown-action)"
-    console.log(TAG, message)
-    if (!this.term) return
-    this.term.writeln(`\r\n${message}`)
-  }
 }

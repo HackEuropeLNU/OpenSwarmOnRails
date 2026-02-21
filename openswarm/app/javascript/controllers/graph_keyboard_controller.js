@@ -1,6 +1,10 @@
 import { Controller } from "@hotwired/stimulus"
 
 const TAG = "[DEBUG:graph_keyboard]"
+const DEBUG = false
+const debug = (...args) => {
+  if (DEBUG) console.log(TAG, ...args)
+}
 
 // Handles keyboard navigation and node selection for the worktree graph.
 export default class extends Controller {
@@ -27,7 +31,7 @@ export default class extends Controller {
   }
 
   connect() {
-    console.log(TAG, "connect", {
+    debug("connect", {
       nodeCount: this.nodeTargets.length,
       selected: this.selectedValue,
       isDesktop: typeof window.desktopShell?.terminal?.create === "function"
@@ -164,7 +168,7 @@ export default class extends Controller {
       termPanel?.classList.contains("hidden")
 
     if (isAlive) {
-      console.log(TAG, "openSelectedTerminal -> toggling alive hidden terminal")
+      debug("openSelectedTerminal -> toggling alive hidden terminal")
       window.dispatchEvent(new CustomEvent("worktree:toggle-terminal"))
       return
     }
@@ -174,7 +178,7 @@ export default class extends Controller {
     )
 
     if (!selectedNode) return
-    console.log(TAG, "openSelectedTerminal -> opening selected node", { nodeId: selectedNode.dataset.nodeId })
+    debug("openSelectedTerminal -> opening selected node", { nodeId: selectedNode.dataset.nodeId })
     this.openTerminal(selectedNode.dataset.nodeId)
   }
 
@@ -384,9 +388,8 @@ export default class extends Controller {
   }
 
   traceAction(action) {
-    const message = `click (${action})`
-    console.log(TAG, message)
-    window.dispatchEvent(new CustomEvent("worktree:action-click", { detail: { message } }))
+    if (!DEBUG) return
+    debug(`click (${action})`)
   }
 
   clearPendingSelect() {
@@ -412,11 +415,11 @@ export default class extends Controller {
 
     // Desktop mode: resolve path from DOM and open PTY directly (skip Rails PTY)
     const isDesktop = typeof window.desktopShell?.terminal?.create === "function"
-    console.log(TAG, "openTerminal called", { worktreeId, isDesktop })
+    debug("openTerminal called", { worktreeId, isDesktop })
     if (isDesktop) {
       const node = this.nodeTargets.find((n) => n.dataset.nodeId === worktreeId)
       const path = node?.dataset.path
-      console.log(TAG, "desktop path lookup", { foundNode: !!node, path })
+      debug("desktop path lookup", { foundNode: !!node, path })
       if (!path) {
         console.error(TAG, "desktop path missing for node", { worktreeId })
         return
@@ -427,7 +430,7 @@ export default class extends Controller {
           detail: { path }
         })
       )
-      console.log(TAG, "dispatched worktree:open-terminal", { path })
+      debug("dispatched worktree:open-terminal", { path })
       return
     }
 
@@ -460,7 +463,7 @@ export default class extends Controller {
       }
 
       const payload = await response.json().catch(() => ({}))
-      console.log(TAG, "browser open terminal success", payload)
+      debug("browser open terminal success", payload)
       window.dispatchEvent(
         new CustomEvent("worktree:open-terminal", {
           detail: payload
