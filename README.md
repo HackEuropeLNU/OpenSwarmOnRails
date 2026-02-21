@@ -17,6 +17,7 @@ make dev-backend
 ```
 
 Then open `http://localhost:3000/`.
+This command now runs both the Rails server and the Tailwind watcher.
 
 If your repo root is not auto-detected, set it explicitly:
 
