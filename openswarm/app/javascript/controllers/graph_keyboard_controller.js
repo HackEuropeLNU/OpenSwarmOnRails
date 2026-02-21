@@ -95,6 +95,18 @@ export default class extends Controller {
   }
 
   openSelectedTerminal() {
+    // If a terminal session is already alive (hidden in background), toggle it back
+    const termPanel = document.querySelector("[data-web-terminal-target='panel']")
+    const termStatus = document.querySelector("[data-web-terminal-target='status']")
+    const isAlive = termStatus &&
+      !["idle", "closed"].includes(termStatus.textContent.trim()) &&
+      termPanel?.classList.contains("hidden")
+
+    if (isAlive) {
+      window.dispatchEvent(new CustomEvent("worktree:toggle-terminal"))
+      return
+    }
+
     const selectedNode = this.nodeTargets.find(
       (node) => node.dataset.nodeId === this.selectedValue
     )

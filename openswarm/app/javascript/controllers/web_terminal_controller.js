@@ -11,52 +11,97 @@ export default class extends Controller {
     this.term = null
     this.fitAddon = null
     this.sessionId = null
+    this.panelVisible = false
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
+    this.toggleHandler = this.togglePanel.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
+    window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.addEventListener("resize", this.resizeHandler)
     document.addEventListener("keydown", this.escapeHandler)
   }
 
   disconnect() {
     window.removeEventListener("worktree:open-terminal", this.openHandler)
+    window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.removeEventListener("resize", this.resizeHandler)
     document.removeEventListener("keydown", this.escapeHandler)
     this.destroyTerminal()
   }
 
-  closePanel() {
+  // ── Show / hide without destroying the PTY ──
+
+  showPanel() {
+    this.panelTarget.classList.remove("hidden")
+    this.panelVisible = true
+
+    // Re-fit after CSS transition reveals the element
+    requestAnimationFrame(() => {
+      if (this.fitAddon && this.term) {
+        this.fitAddon.fit()
+        this.term.focus()
+      }
+    })
+  }
+
+  hidePanel() {
     this.panelTarget.classList.add("hidden")
-    this.destroyTerminal()
+    this.panelVisible = false
+  }
+
+  togglePanel() {
+    if (this.panelVisible) {
+      this.hidePanel()
+    } else if (this.sessionId) {
+      // Only toggle back if there is a live session
+      this.showPanel()
+    }
+  }
+
+  closePanel() {
+    this.hidePanel()
   }
 
   backdropClose(event) {
     if (event.target === this.panelTarget) {
-      this.closePanel()
+      this.hidePanel()
     }
   }
+
+  // ── Open a new terminal session (or re-show existing) ──
 
   openFromEvent(event) {
     const payload = event.detail || {}
     if (!payload.session_id) return
 
-    this.panelTarget.classList.remove("hidden")
+    // If we already have this session, just re-show
+    if (this.sessionId === payload.session_id) {
+      this.showPanel()
+      return
+    }
+
+    // Tear down any previous session before opening a new one
+    this.destroyTerminal()
+
     this.pathTarget.textContent = payload.path || ""
     this.shellTarget.textContent = payload.shell || ""
     this.statusTarget.textContent = "connecting"
 
+    this.showPanel()
     this.setupTerminal()
     this.connectSubscription(payload.session_id)
   }
 
   handleEscape(event) {
-    if (event.key === "Escape" && !this.panelTarget.classList.contains("hidden")) {
-      this.closePanel()
+    if (event.key === "Escape" && this.panelVisible) {
+      this.hidePanel()
     }
   }
+
+  // ── Terminal setup ──
 
   setupTerminal() {
     if (this.term) {
@@ -129,7 +174,6 @@ export default class extends Controller {
         },
         rejected: () => {
           this.statusTarget.textContent = "rejected"
-          window.alert("Failed to connect terminal")
         },
         received: (message) => {
           if (!this.term) return
@@ -142,6 +186,7 @@ export default class extends Controller {
             }
           } else if (message.type === "closed") {
             this.statusTarget.textContent = "closed"
+            this.sessionId = null
           }
         }
       }
@@ -173,6 +218,14 @@ export default class extends Controller {
       this.fitAddon = null
       this.terminalTarget.innerHTML = ""
     }
+  }
+
+  killTerminal() {
+    this.hidePanel()
+    this.destroyTerminal()
+    this.statusTarget.textContent = "idle"
+    this.pathTarget.textContent = ""
+    this.shellTarget.textContent = ""
   }
 
   decodeBase64(data) {
