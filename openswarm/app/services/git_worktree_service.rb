@@ -3,6 +3,8 @@
 # Discovers and inspects git worktrees for registered repository roots.
 # Uses Open3 + git CLI for reliable worktree support.
 class GitWorktreeService
+  DISCOVERY_CACHE_TTL = 2.seconds
+
   Result = Struct.new(:success, :data, :error, keyword_init: true)
 
   WorktreeInfo = Struct.new(
@@ -17,22 +19,30 @@ class GitWorktreeService
     def discover(repo_root)
       return Result.new(success: false, error: "Path does not exist: #{repo_root}") unless File.directory?(repo_root)
 
+      normalized_root = File.expand_path(repo_root)
+      cached = cached_discovery(normalized_root)
+      return cached if cached
+
       # Find the main worktree root first
-      main_root = git(repo_root, "rev-parse", "--show-toplevel")
+      main_root = git(normalized_root, "rev-parse", "--show-toplevel")
       return Result.new(success: false, error: "Not a git repository: #{repo_root}") unless main_root
 
-      porcelain = git(repo_root, "worktree", "list", "--porcelain")
+      main_root = main_root.strip
+
+      porcelain = git(main_root, "worktree", "list", "--porcelain")
       return Result.new(success: false, error: "Failed to list worktrees") unless porcelain
 
-      worktrees = parse_porcelain(porcelain, main_root.strip)
-      assign_parent_branches!(worktrees, main_root.strip)
-      enrich_worktrees!(worktrees, main_root.strip)
+      worktrees = parse_porcelain(porcelain, main_root)
+      assign_parent_branches!(worktrees, main_root)
+      enrich_worktrees!(worktrees, main_root)
 
-      Result.new(success: true, data: {
-        repo_root: main_root.strip,
+      result = Result.new(success: true, data: {
+        repo_root: main_root,
         worktrees: worktrees,
         tree: build_tree(worktrees)
       })
+      write_discovery_cache!(normalized_root, main_root, result)
+      result
     rescue => e
       Result.new(success: false, error: "#{e.class}: #{e.message}")
     end
@@ -100,6 +110,7 @@ class GitWorktreeService
       end
 
       save_parent_hint(main_root, branch, parent_branch)
+      invalidate_discovery_cache!(main_root)
 
       Result.new(success: true, data: {
         id: worktree_id_for(worktree_path, branch),
@@ -132,6 +143,8 @@ class GitWorktreeService
         error = "Failed to delete worktree" if error.empty?
         return Result.new(success: false, error: error)
       end
+
+      invalidate_discovery_cache!(main_root)
 
       Result.new(success: true, data: { path: target_path })
     rescue => e
@@ -170,6 +183,48 @@ class GitWorktreeService
     def git_capture3(working_dir, *args)
       require "open3"
       Open3.capture3("git", *args, chdir: working_dir)
+    end
+
+    def cached_discovery(repo_root)
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      entry = discovery_cache_mutex.synchronize { discovery_cache[repo_root] }
+      return nil unless entry
+      return nil if (now - entry[:at]) > DISCOVERY_CACHE_TTL
+
+      deep_copy_result(entry[:result])
+    end
+
+    def write_discovery_cache!(lookup_root, main_root, result)
+      entry = {
+        at: Process.clock_gettime(Process::CLOCK_MONOTONIC),
+        result: deep_copy_result(result)
+      }
+
+      discovery_cache_mutex.synchronize do
+        discovery_cache[lookup_root] = entry
+        discovery_cache[File.expand_path(main_root)] = entry
+      end
+    end
+
+    def invalidate_discovery_cache!(root)
+      expanded_root = File.expand_path(root)
+      discovery_cache_mutex.synchronize do
+        discovery_cache.delete_if do |cache_root, entry|
+          cache_root == expanded_root || entry[:result]&.data&.[](:repo_root) == expanded_root
+        end
+      end
+    end
+
+    def deep_copy_result(result)
+      Marshal.load(Marshal.dump(result))
+    end
+
+    def discovery_cache
+      @discovery_cache ||= {}
+    end
+
+    def discovery_cache_mutex
+      @discovery_cache_mutex ||= Mutex.new
     end
 
     def normalize_branch_name(raw_name)
