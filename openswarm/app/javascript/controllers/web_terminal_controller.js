@@ -180,7 +180,8 @@ export default class extends Controller {
 
   showPanel() {
     debug("showPanel")
-    this.panelTarget.classList.remove("hidden")
+    this.panelTarget.classList.remove("terminal-panel-hidden")
+    this.panelTarget.classList.add("terminal-panel-visible")
     this.panelVisible = true
     document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
@@ -197,7 +198,8 @@ export default class extends Controller {
 
   hidePanel() {
     debug("hidePanel")
-    this.panelTarget.classList.add("hidden")
+    this.panelTarget.classList.remove("terminal-panel-visible")
+    this.panelTarget.classList.add("terminal-panel-hidden")
     this.panelVisible = false
     document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
@@ -420,7 +422,6 @@ export default class extends Controller {
 
     this.term = new Terminal({
       cursorBlink: true,
-      rendererType: "dom",
       fontFamily: '"SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: 14,
       lineHeight: 1.32,
