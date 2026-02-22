@@ -994,7 +994,10 @@ export default class extends Controller {
     this.traceAction("open-orchestrator")
     const selectedNode = this.selectedNodeTarget()
 
-    if (!selectedNode) return
+    if (!selectedNode) {
+      window.alert("Please select a worktree first")
+      return
+    }
 
     this.pendingOrchestrator = {
       parentId: selectedNode.dataset.nodeId,
@@ -1021,8 +1024,8 @@ export default class extends Controller {
       return
     }
 
-    if (!this.orchestratorUrlValue || !this.repoValue || !this.pendingOrchestrator?.parentId) {
-      window.alert("Orchestrator is not configured on this page")
+    if (!this.orchestratorUrlValue || !this.repoValue || !this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
+      window.alert("Orchestrator is not configured or no worktree selected")
       return
     }
 
