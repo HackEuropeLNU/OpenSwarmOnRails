@@ -339,9 +339,9 @@ export default class extends Controller {
       item.classList.toggle("hover:bg-gray-100", !isSelected)
       item.classList.toggle("dark:hover:bg-slate-800/70", !isSelected)
       if (label) {
-        label.classList.toggle("text-gray-800", isSelected)
+        label.classList.toggle("text-gray-900", isSelected)
         label.classList.toggle("dark:text-red-200", isSelected)
-        label.classList.toggle("text-gray-500", !isSelected)
+        label.classList.toggle("text-gray-700", !isSelected)
         label.classList.toggle("dark:text-slate-300", !isSelected)
       }
     })

@@ -245,12 +245,12 @@
           </div>
           <div class="flex items-start gap-3">
             <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">path</dt>
-            <dd class="text-[11px] text-gray-500 break-all font-mono leading-relaxed"
+            <dd class="text-[11px] text-gray-700 break-all font-mono leading-relaxed"
                 data-graph-keyboard-target="detailsPath"><%= @selected_node ? format_path(@selected_node.path) : "-" %></dd>
           </div>
           <div class="flex items-start gap-3">
             <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">HEAD</dt>
-            <dd class="text-[11px] text-gray-500 font-mono"
+            <dd class="text-[11px] text-gray-700 font-mono"
                 data-graph-keyboard-target="detailsHead"><%= @selected_node ? short_hash(@selected_node.head) : "-" %></dd>
           </div>
           <div class="flex items-center gap-4">
@@ -289,9 +289,9 @@
                data-graph-keyboard-target="listItem">
                <span class="w-1.5 h-1.5 rounded-full shrink-0
                             <%= wt.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"></span>
-               <span class="text-[11px] font-mono truncate text-gray-500" data-node-branch-label>
-                 <%= wt.branch %>
-               </span>
+               <span class="text-[11px] font-mono truncate text-gray-700" data-node-branch-label>
+                  <%= wt.branch %>
+                </span>
                <span class="ml-auto flex items-center gap-1.5">
                 <% if wt.ahead > 0 %>
                   <span class="text-[10px] text-emerald-600 font-mono">+<%= wt.ahead %></span>
@@ -322,7 +322,7 @@
                  placeholder="display name"
                  data-worktree-presence-target="nameInput" />
           <button type="submit"
-                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-800 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
             set
           </button>
         </form>
@@ -335,7 +335,7 @@
                  class="min-w-0 rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1 text-[10px] font-mono text-gray-700 dark:text-slate-200 focus:outline-none focus:border-red-300 dark:focus:border-red-700"
                  placeholder="room name" />
           <button type="submit"
-                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-800 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
             join
           </button>
         </form>
@@ -362,7 +362,7 @@
             share
           </button>
           <button type="button"
-                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-800 text-[10px] font-mono hover:bg-gray-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   data-action="click->worktree-presence#setLocalMode"
                   title="Mark selected worktree as local focus">
             local
