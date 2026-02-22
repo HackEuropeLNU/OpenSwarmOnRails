@@ -172,6 +172,10 @@ export default class extends Controller {
         event.preventDefault()
         this.mergeSelectedToParent()
         break
+      case "z":
+        event.preventDefault()
+        this.shareSelectedInZed()
+        break
     }
   }
 
@@ -275,9 +279,34 @@ export default class extends Controller {
     if (!nodeId) return
     this.selectedValue = nodeId
     this.renderSelectedState()
+
+    const selectedNode = this.selectedNodeTarget()
+    window.dispatchEvent(
+      new CustomEvent("worktree:selected", {
+        detail: {
+          nodeId,
+          branch: selectedNode?.dataset?.branch || null
+        }
+      })
+    )
+
     if (syncUrl) {
       this.syncSelectedToUrl(nodeId)
     }
+  }
+
+  shareSelectedInZed() {
+    const selectedNode = this.selectedNodeTarget()
+    if (!selectedNode) return
+
+    window.dispatchEvent(
+      new CustomEvent("zed:share-request", {
+        detail: {
+          nodeId: selectedNode.dataset.nodeId,
+          branch: selectedNode.dataset.branch || null
+        }
+      })
+    )
   }
 
   syncSelectedToUrl(nodeId) {

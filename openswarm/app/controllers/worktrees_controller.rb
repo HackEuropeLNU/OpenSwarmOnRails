@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest/sha1"
+
 class WorktreesController < ApplicationController
   def index
     @repos = discover_repos
@@ -27,6 +29,7 @@ class WorktreesController < ApplicationController
     @selected_id = params[:selected] || @worktrees.first&.id
     @selected_node = @worktrees.find { |wt| wt.id == @selected_id } || @worktrees.first
     @layout = compute_layout(@tree, @worktrees)
+    @presence_identity = resolve_presence_identity(@selected_repo)
   end
 
   def create_worktree
@@ -412,6 +415,50 @@ class WorktreesController < ApplicationController
     root
   rescue
     nil
+  end
+
+  def resolve_presence_identity(selected_repo)
+    repo_root = selected_repo&.dig(:root)
+    name = git_config_value(repo_root, "user.name") || ENV["GIT_AUTHOR_NAME"] || ENV["USER"] || "developer"
+    email = git_config_value(repo_root, "user.email") || ENV["GIT_AUTHOR_EMAIL"]
+    github_login = github_login_from_email(email)
+
+    identity_source = if email.present?
+      email.downcase
+    else
+      name.to_s.downcase
+    end
+
+    {
+      id: "git:#{Digest::SHA1.hexdigest(identity_source)[0, 16]}",
+      name: name.to_s.strip.presence || "developer",
+      github_login: github_login
+    }
+  end
+
+  def git_config_value(repo_root, key)
+    require "open3"
+
+    if repo_root.present?
+      stdout, _stderr, status = Open3.capture3("git", "-C", repo_root, "config", "--get", key)
+      value = stdout.to_s.strip
+      return value if status.success? && value.present?
+    end
+
+    stdout, _stderr, status = Open3.capture3("git", "config", "--global", "--get", key)
+    value = stdout.to_s.strip
+    return value if status.success? && value.present?
+
+    nil
+  rescue
+    nil
+  end
+
+  def github_login_from_email(email)
+    return nil if email.to_s.strip.empty?
+
+    match = email.to_s.strip.match(/\A([A-Za-z0-9-]+)@users\.noreply\.github\.com\z/i)
+    match&.captures&.first
   end
 
   # Compute x,y positions and SVG edges for worktrees.

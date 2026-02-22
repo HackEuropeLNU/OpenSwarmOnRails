@@ -4,7 +4,7 @@
 <% end %>
 
 <div class="w-full h-screen flex flex-col overflow-hidden"
-     data-controller="graph-keyboard theme web-terminal"
+     data-controller="graph-keyboard theme web-terminal worktree-presence"
      data-theme-target="root"
      data-graph-keyboard-selected-value="<%= @selected_id %>"
      data-graph-keyboard-repo-value="<%= @selected_repo&.dig(:name) %>"
@@ -16,7 +16,14 @@
      data-graph-keyboard-rebase-url-value="<%= rebase_onto_parent_worktrees_path %>"
      data-graph-keyboard-commit-url-value="<%= commit_selected_worktrees_path %>"
      data-graph-keyboard-push-url-value="<%= push_selected_worktrees_path %>"
-     data-graph-keyboard-merge-url-value="<%= merge_to_parent_worktrees_path %>">
+     data-graph-keyboard-merge-url-value="<%= merge_to_parent_worktrees_path %>"
+     data-worktree-presence-repo-value="<%= @selected_repo&.dig(:name) %>"
+     data-worktree-presence-room-value="<%= params[:room].presence || "default" %>"
+     data-worktree-presence-selected-branch-value="<%= @selected_node&.branch %>"
+     data-worktree-presence-selected-id-value="<%= @selected_id %>"
+     data-worktree-presence-identity-id-value="<%= @presence_identity[:id] %>"
+     data-worktree-presence-identity-name-value="<%= @presence_identity[:name] %>"
+     data-worktree-presence-github-login-value="<%= @presence_identity[:github_login] %>">
 
   <%# ═══ Top Bar ═══ %>
   <header class="flex items-center justify-between px-5 py-2.5 border-b border-gray-200 bg-white shrink-0 z-10">
@@ -153,6 +160,10 @@
                   <span class="text-[10px] text-amber-600 font-mono">-<%= wt.behind %></span>
                 <% end %>
               </div>
+
+              <div class="mt-2 flex flex-wrap items-center gap-1"
+                   data-worktree-presence-target="nodeBadge"
+                   data-branch="<%= wt.branch %>"></div>
               </div>
             </button>
 
@@ -286,6 +297,58 @@
         </div>
       </div>
 
+      <%# ─── Zed Shared Worktree POC ─── %>
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">zed shared worktrees</h3>
+          <span class="text-[9px] px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-700 font-mono">live</span>
+        </div>
+
+        <div class="text-[10px] text-gray-400 font-mono mb-3" data-worktree-presence-target="status"></div>
+
+        <form method="get" action="<%= worktrees_path %>" class="grid grid-cols-[1fr_auto] gap-1.5 mb-3">
+          <input type="hidden" name="repo" value="<%= @selected_repo&.dig(:name) %>">
+          <input type="text"
+                 name="room"
+                 value="<%= params[:room].presence || "default" %>"
+                 class="min-w-0 rounded-md border border-gray-300 px-2 py-1 text-[10px] font-mono text-gray-700 focus:outline-none focus:border-blue-300"
+                 placeholder="room name" />
+          <button type="submit"
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100">
+            join
+          </button>
+        </form>
+
+        <div class="flex items-center gap-1.5 mb-3">
+          <input type="text"
+                 readonly
+                 class="flex-1 min-w-0 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-mono text-gray-500"
+                 data-worktree-presence-target="inviteInput" />
+          <button type="button"
+                  class="px-2 py-1 rounded-md border border-blue-300 bg-blue-50 text-blue-700 text-[10px] font-mono hover:bg-blue-100"
+                  data-action="click->worktree-presence#copyInviteLink">
+            copy
+          </button>
+        </div>
+
+        <div class="space-y-1.5 mb-3" data-worktree-presence-target="roster"></div>
+
+        <div class="grid grid-cols-2 gap-1.5">
+          <button type="button"
+                  class="px-2 py-1 rounded-md border border-indigo-300 bg-indigo-50 text-indigo-700 text-[10px] font-mono hover:bg-indigo-100"
+                  data-action="click->worktree-presence#shareSelected"
+                  title="Mark selected worktree as shared in Zed (z)">
+            share
+          </button>
+          <button type="button"
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100"
+                  data-action="click->worktree-presence#setLocalMode"
+                  title="Mark selected worktree as local focus">
+            local
+          </button>
+        </div>
+      </div>
+
       <%# ─── Actions ─── %>
       <div class="p-4 flex-1">
         <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">actions</h3>
@@ -312,6 +375,7 @@
             ["F", "rebase onto parent"],
             ["c", "add + commit"],
             ["p", "push"],
+            ["z", "share in zed"],
             ["d", "delete worktree"],
             ["m", "merge to parent"],
           ].each do |key, label| %>
