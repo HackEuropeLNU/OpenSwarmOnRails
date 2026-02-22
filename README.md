@@ -4,6 +4,10 @@
 
 OpenSwarm is a Rails app that helps you manage multiple AI agents and Git worktrees from one screen without juggling terminals, manual `git worktree` commands, or context switching.
 
+## Demo video
+
+<video src="media/0222.mp4" controls playsinline></video>
+
 ## The problem
 
 Running 5-10 parallel agents today requires juggling:
