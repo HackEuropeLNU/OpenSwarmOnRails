@@ -38,5 +38,12 @@ module Openswarm
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Configuration for Miro MCP API
+    config.miro = {
+      client_id: ENV['MIRO_CLIENT_ID'],
+      client_secret: ENV['MIRO_CLIENT_SECRET'],
+      redirect_uri: ENV['MIRO_REDIRECT_URI']
+    }
   end
 end

@@ -21,5 +21,8 @@ Rails.application.routes.draw do
   # Health check
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Route for syncing with Miro
+  post "/miro/sync", to: "miro#sync"
+
   mount ActionCable.server => "/cable"
 end
