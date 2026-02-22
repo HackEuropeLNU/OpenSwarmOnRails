@@ -398,9 +398,10 @@ export default class extends Controller {
 
       this.term.reset()
       if (snapshot) {
-        this.term.write(snapshot)
-        this.recordOutputActivity(snapshot, sessionId)
-        this.processTerminalOutput(snapshot, sessionId)
+        const sanitizedSnapshot = this.sanitizeSnapshotPrefix(snapshot)
+        this.term.write(sanitizedSnapshot)
+        this.recordOutputActivity(sanitizedSnapshot, sessionId)
+        this.processTerminalOutput(sanitizedSnapshot, sessionId)
       }
 
       this.flushHydrationDeferredOutput(sessionId)
@@ -641,6 +642,11 @@ export default class extends Controller {
     if (sessionId && this.sessionId && sessionId !== this.sessionId) return
     this.term.write(this.hydrationDeferredOutput)
     this.hydrationDeferredOutput = ""
+  }
+
+  sanitizeSnapshotPrefix(snapshot) {
+    if (!snapshot) return ""
+    return snapshot.replace(/^\??\d{1,4}(?:;\d{1,4})*[hlmJKHfABCDsu](?:\r?\n)?/, "")
   }
 
   scheduleTerminalRepaint({ delayMs = 0, focus = false } = {}) {
