@@ -31,23 +31,20 @@ class PromptTemplateService
 
       Instructions:
       1) Analyze the feature request and determine what worktrees are needed.
-      2) For each worktree needed, respond with a JSON object in the format:
-        {"name": "branch-name", "description": "what this worktree should implement"}
+      2) Do NOT output a JSON plan. Create the worktrees directly.
       3) Consider splitting worktrees by:
-        - Frontend vs Backend concerns
-        - API contracts vs implementation
-        - Database/migrations vs application code
-        - Configuration vs feature code
-      4) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations")
-      5) Return a JSON array of worktree objects. Example:
-        [{"name": "feature/add-auth", "description": "Main feature branch - coordinates sub-worktrees"}, {"name": "feature/add-auth-api", "description": "Backend API endpoints and authentication logic"}, {"name": "feature/add-auth-frontend", "description": "Frontend login/signup forms and UI components"}, {"name": "feature/add-auth-migrations", "description": "Database schema and migrations for users table"}]
-      6) After printing the JSON plan, actually create each worktree from the parent worktree using real git commands (not pseudocode).
-      7) You must execute the commands. Do not stop after just printing the plan.
-      8) Use this command pattern for every planned worktree:
+         - Frontend vs Backend concerns
+         - API contracts vs implementation
+         - Database/migrations vs application code
+         - Configuration vs feature code
+      4) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations").
+      5) Determine the current parent branch from the parent worktree.
+      6) Use this command pattern for every planned worktree:
          git -C "{parent_path}" worktree add -b "<branch-name>" "$(dirname "{parent_path}")/<branch-name-with-slashes-replaced-by-dashes>" "<current-parent-branch>"
-      9) After creating all worktrees, run:
+      7) You must execute the commands. Do not stop after planning.
+      8) After creating all worktrees, run:
          git -C "{parent_path}" worktree list
-         and report the created paths.
+      9) Report what you created as a concise human-readable list (branch -> path).
       10) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
     PROMPT
   }.freeze
