@@ -307,6 +307,19 @@
 
         <div class="text-[10px] text-gray-400 font-mono mb-3" data-worktree-presence-target="status"></div>
 
+        <form class="grid grid-cols-[1fr_auto] gap-1.5 mb-3"
+              data-action="submit->worktree-presence#submitName">
+          <input type="text"
+                 maxlength="40"
+                 class="min-w-0 rounded-md border border-gray-300 px-2 py-1 text-[10px] font-mono text-gray-700 focus:outline-none focus:border-blue-300"
+                 placeholder="display name"
+                 data-worktree-presence-target="nameInput" />
+          <button type="submit"
+                  class="px-2 py-1 rounded-md border border-gray-300 bg-white text-gray-600 text-[10px] font-mono hover:bg-gray-100">
+            set
+          </button>
+        </form>
+
         <form method="get" action="<%= worktrees_path %>" class="grid grid-cols-[1fr_auto] gap-1.5 mb-3">
           <input type="hidden" name="repo" value="<%= @selected_repo&.dig(:name) %>">
           <input type="text"

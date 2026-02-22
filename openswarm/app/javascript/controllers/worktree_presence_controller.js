@@ -4,7 +4,7 @@ import consumer from "cable_consumer"
 const HEARTBEAT_MS = 10_000
 
 export default class extends Controller {
-  static targets = ["roster", "nodeBadge", "status", "inviteInput"]
+  static targets = ["roster", "nodeBadge", "status", "inviteInput", "nameInput"]
 
   static values = {
     repo: String,
@@ -22,7 +22,7 @@ export default class extends Controller {
     this.selectedBranch = this.selectedBranchValue || null
     this.selectedId = this.selectedIdValue || null
     this.members = []
-    this.publicIdentityName = this.presenceName()
+    this.publicIdentityName = this.loadCustomName() || this.presenceName()
 
     this.selectionHandler = this.onSelectionChanged.bind(this)
     this.shareHandler = this.onShareRequest.bind(this)
@@ -31,6 +31,10 @@ export default class extends Controller {
 
     if (this.hasInviteInputTarget) {
       this.inviteInputTarget.value = this.inviteUrl()
+    }
+
+    if (this.hasNameInputTarget) {
+      this.nameInputTarget.value = this.publicIdentityName
     }
 
     this.subscribe()
@@ -77,6 +81,30 @@ export default class extends Controller {
       }
       this.renderStatus("copy failed")
     }
+  }
+
+  submitName(event) {
+    event?.preventDefault?.()
+
+    const rawValue = this.hasNameInputTarget ? this.nameInputTarget.value : ""
+    const customName = this.normalizeName(rawValue)
+
+    if (customName) {
+      this.publicIdentityName = customName
+      this.storeCustomName(customName)
+      this.renderStatus("name saved")
+    } else {
+      this.clearCustomName()
+      this.publicIdentityName = this.presenceName()
+      this.renderStatus("name reset")
+    }
+
+    if (this.hasNameInputTarget) {
+      this.nameInputTarget.value = this.publicIdentityName
+    }
+
+    this.upsertPresence()
+    this.render()
   }
 
   subscribe() {
@@ -259,6 +287,8 @@ export default class extends Controller {
   }
 
   presenceName() {
+    const identityName = this.normalizeName(this.identityNameValue)
+    if (identityName) return identityName
     if (this.githubLoginValue) return `@${this.githubLoginValue}`
     return this.anonymousName(this.identityIdValue)
   }
@@ -273,13 +303,48 @@ export default class extends Controller {
   }
 
   memberDisplayName(member) {
+    const name = this.normalizeName(member?.name)
+    if (name) return name
     if (member?.github_login) return `@${member.github_login}`
-
-    const name = String(member?.name || "").trim()
-    if (!name) return this.anonymousName(member?.identity_id)
-    if (name.startsWith("dev-")) return name
-
     return this.anonymousName(member?.identity_id)
+  }
+
+  customNameStorageKey() {
+    const repo = this.repoValue || "default"
+    const room = this.roomValue || "default"
+    const identity = this.identityIdValue || "anonymous"
+    return `openswarm.presenceName.${repo}.${room}.${identity}`
+  }
+
+  loadCustomName() {
+    try {
+      const value = window.localStorage.getItem(this.customNameStorageKey())
+      return this.normalizeName(value)
+    } catch (_error) {
+      return null
+    }
+  }
+
+  storeCustomName(value) {
+    try {
+      window.localStorage.setItem(this.customNameStorageKey(), value)
+    } catch (_error) {
+      // ignored
+    }
+  }
+
+  clearCustomName() {
+    try {
+      window.localStorage.removeItem(this.customNameStorageKey())
+    } catch (_error) {
+      // ignored
+    }
+  }
+
+  normalizeName(value) {
+    const trimmed = String(value || "").replace(/\s+/g, " ").trim()
+    if (!trimmed) return null
+    return trimmed.slice(0, 40)
   }
 
   worktreeLabelMap() {
