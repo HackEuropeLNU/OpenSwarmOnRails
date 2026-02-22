@@ -706,16 +706,11 @@ export default class extends Controller {
     const normalized = String(text)
       .replace(/\r\n/g, "\n")
       .replace(/\r/g, "\n")
+      .replace(/\s*\n\s*/g, " ")
       .trim()
 
-    let delimiter = "OPENSWARM_PROMPT"
-    let suffix = 1
-    while (normalized.includes(delimiter)) {
-      delimiter = `OPENSWARM_PROMPT_${suffix}`
-      suffix += 1
-    }
-
-    return `opencode --prompt "$(cat <<'${delimiter}'\n${normalized}\n${delimiter}\n)"`
+    const escaped = normalized.replace(/'/g, `'"'"'`)
+    return `opencode --prompt '${escaped}'`
   }
 
   createFromNode(event) {
