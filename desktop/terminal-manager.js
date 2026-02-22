@@ -237,22 +237,57 @@ class TerminalManager extends EventEmitter {
   _safeSnapshotSlice(buffer, limit) {
     if (!buffer) return "";
 
-    const startIndex = Math.max(buffer.length - limit, 0);
+    let startIndex = Math.max(buffer.length - limit, 0);
     if (startIndex === 0) {
       return buffer;
     }
 
-    const newlineIndex = buffer.indexOf("\n", startIndex);
-    if (newlineIndex !== -1 && newlineIndex + 1 < buffer.length) {
-      return buffer.slice(newlineIndex + 1);
-    }
-
-    const carriageReturnIndex = buffer.indexOf("\r", startIndex);
-    if (carriageReturnIndex !== -1 && carriageReturnIndex + 1 < buffer.length) {
-      return buffer.slice(carriageReturnIndex + 1);
+    // If we're in the middle of an ANSI/VT escape sequence, skip to the
+    // sequence end so xterm does not render control tail text (e.g. "1004h").
+    const lastEsc = buffer.lastIndexOf("\x1b", startIndex);
+    if (lastEsc !== -1) {
+      const escEnd = this._findEscapeSequenceEnd(buffer, lastEsc);
+      if (escEnd >= startIndex) {
+        startIndex = Math.min(escEnd + 1, buffer.length);
+      }
     }
 
     return buffer.slice(startIndex);
+  }
+
+  _findEscapeSequenceEnd(buffer, escIndex) {
+    const next = buffer[escIndex + 1];
+    if (!next) return escIndex;
+
+    // CSI: ESC [ ... final-byte(@-~)
+    if (next === "[") {
+      for (let i = escIndex + 2; i < buffer.length; i += 1) {
+        const code = buffer.charCodeAt(i);
+        if (code >= 0x40 && code <= 0x7e) return i;
+      }
+      return buffer.length - 1;
+    }
+
+    // OSC: ESC ] ... (BEL or ST)
+    if (next === "]") {
+      for (let i = escIndex + 2; i < buffer.length; i += 1) {
+        const code = buffer.charCodeAt(i);
+        if (code === 0x07) return i;
+        if (code === 0x1b && buffer[i + 1] === "\\") return i + 1;
+      }
+      return buffer.length - 1;
+    }
+
+    // DCS/SOS/PM/APC: ESC P/X/^/_ ... ST
+    if (next === "P" || next === "X" || next === "^" || next === "_") {
+      for (let i = escIndex + 2; i < buffer.length; i += 1) {
+        if (buffer.charCodeAt(i) === 0x1b && buffer[i + 1] === "\\") return i + 1;
+      }
+      return buffer.length - 1;
+    }
+
+    // Most other ESC sequences are two bytes.
+    return Math.min(escIndex + 1, buffer.length - 1);
   }
 
   _normalizeCwd(value) {
