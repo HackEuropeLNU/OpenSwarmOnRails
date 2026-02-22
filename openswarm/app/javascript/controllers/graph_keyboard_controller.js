@@ -107,7 +107,7 @@ export default class extends Controller {
       return
     }
 
-    if (this.isTerminalSessionActive(event)) return
+    if (this.isTerminalPanelVisible()) return
 
     // Skip if user is typing in an input
     const tag = event.target.tagName
@@ -1013,23 +1013,6 @@ export default class extends Controller {
     const message = payload.error || payload.raw || `Failed to create worktree (${response.status})`
     const conflict = /already exists/i.test(message)
     return { ok: false, payload, message, conflict }
-  }
-
-  isTerminalSessionActive(event) {
-    const panel = document.querySelector(".terminal-panel[data-visible='true']")
-    if (!panel) return false
-
-    const target = event.target
-    if (target instanceof Element && target.closest(".terminal-panel")) {
-      return true
-    }
-
-    const active = document.activeElement
-    if (active instanceof Element && active.closest(".terminal-panel")) {
-      return true
-    }
-
-    return false
   }
 
   traceAction(action) {
