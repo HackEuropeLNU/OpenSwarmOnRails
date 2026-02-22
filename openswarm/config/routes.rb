@@ -14,6 +14,7 @@ Rails.application.routes.draw do
       post :commit_selected
       post :push_selected
       post :merge_to_parent
+      post :orchestrator
     end
   end
 

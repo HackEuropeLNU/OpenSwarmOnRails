@@ -39,7 +39,9 @@ export default class extends Controller {
     "mergeConflictSource",
     "mergeConflictTarget",
     "mergeConflictFiles",
-    "mergeConflictManual"
+    "mergeConflictManual",
+    "orchestratorModal",
+    "orchestratorInput"
   ]
 
   static values = {
@@ -53,6 +55,7 @@ export default class extends Controller {
     commitUrl: String,
     pushUrl: String,
     mergeUrl: String,
+    orchestratorUrl: String,
     repo: String
   }
 
@@ -70,6 +73,7 @@ export default class extends Controller {
     this.pendingReplaceCreatePayload = null
     this.pendingCommitWorktreeId = null
     this.pendingMergeConflict = null
+    this.pendingOrchestrator = null
     this.openTerminalInFlight = false
     this.refreshTimeoutIds = []
     this.lastAutoRefreshAt = 0
@@ -175,6 +179,10 @@ export default class extends Controller {
       case "z":
         event.preventDefault()
         this.shareSelectedInZed()
+        break
+      case "g":
+        event.preventDefault()
+        this.openOrchestrator()
         break
     }
   }
@@ -970,12 +978,89 @@ export default class extends Controller {
     if (this.hasCommitModalTarget) {
       this.commitModalTarget.classList.add("hidden")
     }
+    if (this.hasOrchestratorModalTarget) {
+      this.orchestratorModalTarget.classList.add("hidden")
+    }
     this.pendingCreateParentId = null
     this.pendingReplaceCreatePayload = null
     this.pendingDeleteWorktreeId = null
     this.pendingDeleteForce = false
     this.pendingCommitWorktreeId = null
     this.pendingMergeConflict = null
+    this.pendingOrchestrator = null
+  }
+
+  openOrchestrator() {
+    this.traceAction("open-orchestrator")
+    const selectedNode = this.selectedNodeTarget()
+
+    if (!selectedNode) return
+
+    this.pendingOrchestrator = {
+      parentId: selectedNode.dataset.nodeId,
+      parentBranch: selectedNode.dataset.branch
+    }
+
+    this.orchestratorInputTarget.value = ""
+    this.orchestratorModalTarget.classList.remove("hidden")
+    this.orchestratorInputTarget.focus()
+  }
+
+  cancelOrchestrator(event) {
+    event?.preventDefault?.()
+    this.closeDialogs()
+  }
+
+  async submitOrchestrator(event) {
+    event.preventDefault()
+    this.traceAction("submit-orchestrator")
+
+    const feature = this.orchestratorInputTarget.value.trim()
+    if (!feature) {
+      window.alert("Please describe the feature you want to orchestrate")
+      return
+    }
+
+    if (!this.orchestratorUrlValue || !this.repoValue || !this.pendingOrchestrator?.parentId) {
+      window.alert("Orchestrator is not configured on this page")
+      return
+    }
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch(this.orchestratorUrlValue, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          worktree_id: this.pendingOrchestrator.parentId,
+          feature: feature
+        })
+      })
+
+      const payload = await this.parseJsonResponse(response)
+      if (!response.ok) {
+        window.alert(payload.error || payload.raw || "Failed to generate orchestrator plan")
+        return
+      }
+
+      if (payload.prompt) {
+        const command = `opencode --prompt ${this.shellQuotedSingleLineArg(payload.prompt)}`
+        this.closeDialogs()
+        await this.openTerminal(this.pendingOrchestrator.parentId, { initialCommand: command })
+      } else {
+        window.alert("No prompt returned from orchestrator")
+      }
+    } catch (error) {
+      window.alert(error?.message || "Failed to generate orchestrator plan")
+    }
   }
 
   closeDialogBackdrop(event) {
@@ -989,7 +1074,8 @@ export default class extends Controller {
       !this.replaceModalTarget.classList.contains("hidden") ||
       !this.deleteModalTarget.classList.contains("hidden") ||
       (this.hasMergeConflictModalTarget && !this.mergeConflictModalTarget.classList.contains("hidden")) ||
-      (this.hasCommitModalTarget && !this.commitModalTarget.classList.contains("hidden"))
+      (this.hasCommitModalTarget && !this.commitModalTarget.classList.contains("hidden")) ||
+      (this.hasOrchestratorModalTarget && !this.orchestratorModalTarget.classList.contains("hidden"))
   }
 
   async requestCreateWorktree({ parentId, branchName, replaceExisting, forceReplace }) {

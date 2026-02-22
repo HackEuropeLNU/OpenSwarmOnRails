@@ -14,9 +14,10 @@
      data-graph-keyboard-open-url-value="<%= open_terminal_worktrees_path %>"
      data-graph-keyboard-fetch-pull-url-value="<%= fetch_pull_parent_worktrees_path %>"
      data-graph-keyboard-rebase-url-value="<%= rebase_onto_parent_worktrees_path %>"
-     data-graph-keyboard-commit-url-value="<%= commit_selected_worktrees_path %>"
-     data-graph-keyboard-push-url-value="<%= push_selected_worktrees_path %>"
-     data-graph-keyboard-merge-url-value="<%= merge_to_parent_worktrees_path %>"
+      data-graph-keyboard-commit-url-value="<%= commit_selected_worktrees_path %>"
+      data-graph-keyboard-push-url-value="<%= push_selected_worktrees_path %>"
+      data-graph-keyboard-merge-url-value="<%= merge_to_parent_worktrees_path %>"
+      data-graph-keyboard-orchestrator-url-value="<%= orchestrator_worktrees_path %>"
      data-worktree-presence-repo-value="<%= @selected_repo&.dig(:name) %>"
      data-worktree-presence-room-value="<%= params[:room].presence || "default" %>"
      data-worktree-presence-selected-branch-value="<%= @selected_node&.branch %>"
@@ -559,6 +560,36 @@
         <button type="button"
                 class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
                 data-action="click->graph-keyboard#resolveMergeConflictWithAgent">resolve with agent</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="hidden fixed inset-0 z-[58] bg-black/35 flex items-center justify-center p-4"
+       data-graph-keyboard-target="orchestratorModal"
+       data-action="click->graph-keyboard#closeDialogBackdrop">
+    <form class="w-full max-w-lg rounded-xl border border-purple-300 bg-white dark:bg-slate-900 dark:border-purple-700/60 shadow-xl p-4"
+          data-action="submit->graph-keyboard#submitOrchestrator click->graph-keyboard#closeDialogBackdrop">
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">orchestrate feature</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        Break down a feature into worktrees for parallel development
+      </p>
+      <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1" for="orchestrator-feature">feature description</label>
+      <input id="orchestrator-feature"
+             type="text"
+             required
+             autocomplete="off"
+             class="w-full rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-2 text-[12px] font-mono text-gray-800 dark:text-slate-100 focus:outline-none focus:border-purple-400 dark:focus:border-purple-700"
+             data-graph-keyboard-target="orchestratorInput"
+             placeholder="e.g., add authentication, implement user dashboard, etc." />
+      <p class="text-[10px] text-gray-400 dark:text-slate-500 font-mono mt-2 mb-4">
+        Press <kbd class="px-1 py-0.5 bg-gray-100 dark:bg-slate-800 rounded border border-gray-200 dark:border-slate-700 text-gray-500">g</kbd> to open terminal with orchestrator prompt. The AI will suggest worktree structure.
+      </p>
+      <div class="flex items-center justify-end gap-2">
+        <button type="button"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:ring-offset-1"
+                data-action="click->graph-keyboard#cancelOrchestrator">cancel</button>
+        <button type="submit"
+                class="px-2.5 py-1.5 rounded-md border border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60 text-[11px] font-mono hover:bg-purple-100 dark:hover:bg-purple-900/50 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:ring-offset-1">generate plan</button>
       </div>
     </form>
   </div>

@@ -278,6 +278,28 @@ class WorktreesController < ApplicationController
     render json: { error: "Internal error pushing worktree: #{e.message}" }, status: :internal_server_error
   end
 
+  def orchestrator
+    repo_name = params[:repo].to_s
+    worktree_id = params[:worktree_id].to_s
+    feature_description = params[:feature].to_s.strip
+
+    return render json: { error: "Feature description is required" }, status: :unprocessable_entity if feature_description.empty?
+
+    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
+    return unless selected_repo && worktree
+
+    prompt = PromptTemplateService.orchestrator_prompt(
+      parent_path: worktree.path,
+      feature_description: feature_description
+    )
+
+    render json: {
+      prompt: prompt,
+      parent_id: worktree.id,
+      parent_branch: worktree.branch
+    }
+  end
+
   def merge_to_parent
     repo_name = params[:repo].to_s
     worktree_id = params[:worktree_id].to_s

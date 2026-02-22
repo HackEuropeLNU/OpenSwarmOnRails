@@ -4,7 +4,7 @@ class PromptTemplateService
   PROMPT_PATH = Rails.root.join("config", "prompt.json")
 
   DEFAULT_PROMPTS = {
-    "merge_conflict_resolver" => <<~PROMPT.strip
+    "merge_conflict_resolver" => <<~PROMPT.strip,
       Resolve the current Git merge conflict in this worktree.
 
       Context:
@@ -22,6 +22,27 @@ class PromptTemplateService
       5) Summarize what was resolved and any risks.
       6) Do not push. Stop after conflicts are resolved and staged.
     PROMPT
+    "orchestrator" => <<~PROMPT.strip
+      You are a worktree orchestrator. Your job is to break down a feature request into appropriate git worktrees for parallel development.
+
+      Context:
+      - Parent worktree path: {parent_path}
+      - Feature request: {feature_description}
+
+      Instructions:
+      1) Analyze the feature request and determine what worktrees are needed.
+      2) For each worktree needed, respond with a JSON object in the format:
+        {"name": "branch-name", "description": "what this worktree should implement"}
+      3) Consider splitting worktrees by:
+        - Frontend vs Backend concerns
+        - API contracts vs implementation
+        - Database/migrations vs application code
+        - Configuration vs feature code
+      4) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations")
+      5) Return a JSON array of worktree objects. Example:
+        [{"name": "feature/add-auth", "description": "Main feature branch - coordinates sub-worktrees"}, {"name": "feature/add-auth-api", "description": "Backend API endpoints and authentication logic"}, {"name": "feature/add-auth-frontend", "description": "Frontend login/signup forms and UI components"}, {"name": "feature/add-auth-migrations", "description": "Database schema and migrations for users table"}]
+      6) Do NOT create worktrees yourself - just output the JSON array describing what worktrees should be created.
+    PROMPT
   }.freeze
 
   class << self
@@ -36,6 +57,15 @@ class PromptTemplateService
         .gsub("{source_branch}", source_branch.to_s)
         .gsub("{target_branch}", target_branch.to_s)
         .gsub("{conflicted_files}", formatted_files)
+    end
+
+    def orchestrator_prompt(parent_path:, feature_description:)
+      template = load_prompts.fetch("orchestrator", DEFAULT_PROMPTS["orchestrator"])
+
+      template
+        .to_s
+        .gsub("{parent_path}", parent_path.to_s)
+        .gsub("{feature_description}", feature_description.to_s)
     end
 
     private
