@@ -1029,6 +1029,8 @@ export default class extends Controller {
       return
     }
 
+    const parentId = this.pendingOrchestrator.parentId
+
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
       ?.getAttribute("content")
@@ -1043,7 +1045,7 @@ export default class extends Controller {
         },
         body: JSON.stringify({
           repo: this.repoValue,
-          worktree_id: this.pendingOrchestrator.parentId,
+          worktree_id: parentId,
           feature: feature
         })
       })
@@ -1057,7 +1059,7 @@ export default class extends Controller {
       if (payload.prompt) {
         const command = `opencode --prompt ${this.shellQuotedSingleLineArg(payload.prompt)}`
         this.closeDialogs()
-        await this.openTerminal(this.pendingOrchestrator.parentId, { initialCommand: command })
+        await this.openTerminal(parentId, { initialCommand: command })
       } else {
         window.alert("No prompt returned from orchestrator")
       }
