@@ -21,5 +21,9 @@ Rails.application.routes.draw do
   # Health check
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # Routes for Miro integration
+  post "/miro/push", to: "miro#push"
+  post "/miro/pull", to: "miro#pull"
+
   mount ActionCable.server => "/cable"
 end

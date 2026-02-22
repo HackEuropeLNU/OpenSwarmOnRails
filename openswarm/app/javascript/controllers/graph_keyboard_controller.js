@@ -1278,4 +1278,156 @@ export default class extends Controller {
     requestAnimationFrame(() => element.focus())
   }
 
+  async pushToMiro() {
+    this.traceAction("push-to-miro")
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      const response = await fetch("/miro/push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          diagram: this.getDiagramData()
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const message = `${data.message}\n\nBoard: ${data.board_name}\nBoard ID: ${data.board_id}\n\nView in Miro: ${data.board_url}`
+        if (window.confirm(message + "\n\nOpen Miro board?")) {
+          window.open(data.board_url, "_blank")
+        }
+      } else {
+        const error = await response.json()
+        window.alert(error.error || error.message || "Failed to push to Miro")
+      }
+    } catch (error) {
+      window.alert(error.message || "An unexpected error occurred")
+    }
+  }
+
+  async pullFromMiro() {
+    this.traceAction("pull-from-miro")
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      // First, fetch preview of what would be created
+      const response = await fetch("/miro/pull", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          preview: true
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        window.alert(error.error || error.message || "Failed to pull from Miro")
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.new_branches.length === 0) {
+        window.alert("No new branches found in Miro board.\n\nAll branches in Miro already exist as worktrees.")
+        return
+      }
+
+      // Show preview and ask for confirmation
+      const branchList = data.new_branches.map(b => `  • ${b.branch} (parent: ${b.parent || 'root'})`).join("\n")
+      const confirmMessage = `Found ${data.new_branches.length} new branch(es) in Miro:\n\n${branchList}\n\nCreate these worktrees?`
+
+      if (!window.confirm(confirmMessage)) {
+        return
+      }
+
+      // Execute the pull with create=true
+      const createResponse = await fetch("/miro/pull", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          preview: false,
+          branches_to_create: data.new_branches
+        })
+      })
+
+      if (createResponse.ok) {
+        const createData = await createResponse.json()
+        window.alert(`${createData.message}\n\nPage will refresh to show new worktrees.`)
+        window.location.reload()
+      } else {
+        const error = await createResponse.json()
+        window.alert(error.error || error.message || "Failed to create worktrees from Miro")
+      }
+    } catch (error) {
+      window.alert(error.message || "An unexpected error occurred")
+    }
+  }
+
+  getDiagramData() {
+    // Gather actual diagram data from the DOM
+    const nodes = []
+    const edges = []
+
+    // Get all node elements
+    const nodeElements = document.querySelectorAll('[data-node-id]')
+    nodeElements.forEach(el => {
+      const parent = el.closest('.absolute.group')
+      const rect = parent ? parent.getBoundingClientRect() : el.getBoundingClientRect()
+      const canvasRect = this.canvasTarget.getBoundingClientRect()
+
+      nodes.push({
+        id: el.dataset.nodeId,
+        branch: el.dataset.branch,
+        parentBranch: el.dataset.parentBranch || null,
+        dirty: el.dataset.dirty === 'true',
+        state: el.dataset.state,
+        x: Math.round(rect.left - canvasRect.left + this.canvasTarget.scrollLeft),
+        y: Math.round(rect.top - canvasRect.top + this.canvasTarget.scrollTop),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      })
+    })
+
+    // Build edges from parent-child relationships
+    nodes.forEach(node => {
+      if (node.parentBranch) {
+        const parentNode = nodes.find(n => n.branch === node.parentBranch)
+        if (parentNode) {
+          edges.push({
+            from: parentNode.id,
+            to: node.id,
+            fromBranch: parentNode.branch,
+            toBranch: node.branch
+          })
+        }
+      }
+    })
+
+    return {
+      repo: this.repoValue,
+      nodes,
+      edges
+    }
+  }
 }
