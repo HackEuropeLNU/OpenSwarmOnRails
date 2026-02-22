@@ -36,6 +36,9 @@ const TOKEN_RATE_PATTERNS = [
   /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
 ]
 const TOKEN_UI_STALE_MS = 8_000
+const CHARS_PER_TOKEN_ESTIMATE = 4
+const VELOCITY_WINDOW_MS = 2000
+const VELOCITY_EMIT_INTERVAL_MS = 800
 const GIT_MUTATION_COMMAND_REGEX = /\bgit\s+(?:commit|push|pull|fetch|merge|rebase|cherry-pick|revert|reset|switch|checkout|branch|stash|worktree|am|apply)\b/i
 
 export default class extends Controller {
@@ -854,13 +857,36 @@ export default class extends Controller {
   }
 
   renderTokenRateUi(detail) {
-    const worktreeId = this.resolveWorktreeIdFromTokenDetail(detail)
     const tokensPerSecond = Number(detail?.tokensPerSecond)
-    if (!worktreeId || !Number.isFinite(tokensPerSecond) || tokensPerSecond < 0) return
+    if (!Number.isFinite(tokensPerSecond) || tokensPerSecond < 0) return
+
+    // Try to resolve worktreeId; also try path from desktopPathBySessionId
+    let worktreeId = this.resolveWorktreeIdFromTokenDetail(detail)
+    if (!worktreeId && detail?.sessionId) {
+      const ptyPath = this.desktopPathBySessionId.get(detail.sessionId)
+      if (ptyPath) {
+        worktreeId = this.findWorktreeIdByPath(ptyPath)
+      }
+    }
+
+    // Last resort: try all node paths for a suffix match against activePath
+    if (!worktreeId && this.activePath) {
+      worktreeId = this.findWorktreeIdByPathSuffix(this.activePath)
+    }
+
+    if (!worktreeId) {
+      // Broadcast to ALL nodes if we can't resolve a specific one
+      // (better to show something than nothing)
+      const badges = document.querySelectorAll("[data-worktree-presence-target='nodeTokenRate']")
+      if (badges.length === 0) {
+        console.log(TAG, "no nodeTokenRate badges found in DOM at all")
+      }
+      return
+    }
 
     const badge = document.querySelector(`[data-worktree-presence-target='nodeTokenRate'][data-worktree-id='${worktreeId}']`)
     if (!badge) {
-      console.log(TAG, "token ui badge not found", { worktreeId, detail })
+      console.log(TAG, "token ui badge element not found for worktreeId", { worktreeId })
       return
     }
 
@@ -870,6 +896,21 @@ export default class extends Controller {
 
     badge.classList.remove("hidden")
     badge.textContent = `${tokensPerSecond.toFixed(1)} tok/s`
+  }
+
+  findWorktreeIdByPathSuffix(targetPath) {
+    const normalized = this.normalizePath(targetPath)
+    if (!normalized) return null
+
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    for (const node of nodes) {
+      const nodePath = this.normalizePath(node?.dataset?.path)
+      if (!nodePath) continue
+      if (normalized === nodePath) return node?.dataset?.nodeId || null
+      if (normalized.endsWith(nodePath) || nodePath.endsWith(normalized)) return node?.dataset?.nodeId || null
+    }
+
+    return null
   }
 
   pruneTokenRateUi() {
@@ -973,6 +1014,8 @@ export default class extends Controller {
           state.noTokenChunkCount = 0
           state.lastTokenCounter = null
           state.lastTokenCounterAt = 0
+          state.velocityChunks = []
+          state.lastVelocityEmitAt = 0
           this.runningSessionIds.delete(sessionId)
           this.updateBackgroundIndicator()
           console.log(TAG, "opencode start detected", { sessionId, path: this.desktopPathBySessionId.get(sessionId) || this.activePath })
@@ -1011,19 +1054,55 @@ export default class extends Controller {
     if (!text || !sessionId) return
 
     const state = this.getSessionState(sessionId)
-    if (!state.trackingOpencode) return
 
+    // Always track output tail (used for shell prompt detection)
     state.outputTail += text
     if (state.outputTail.length > 2048) {
       state.outputTail = state.outputTail.slice(-2048)
     }
 
+    // ── Character velocity tracking — runs ALWAYS, not gated on trackingOpencode ──
+    const now = Date.now()
     const normalizedText = this.stripAnsi(text)
-    const tokenRate = this.extractTokenRate(normalizedText, state)
+    const strippedLen = normalizedText.length
 
-    if (tokenRate !== null) {
+    // Skip tiny ANSI-only or control-char-only chunks (spinners, cursor moves)
+    if (strippedLen > 2) {
+      state.velocityChunks.push({ ts: now, chars: strippedLen })
+    }
+
+    // Prune old entries outside window
+    const windowStart = now - VELOCITY_WINDOW_MS
+    while (state.velocityChunks.length > 0 && state.velocityChunks[0].ts < windowStart) {
+      state.velocityChunks.shift()
+    }
+
+    // Try regex-based explicit token rate first
+    const regexRate = this.extractTokenRate(normalizedText, state)
+
+    // Compute character velocity as fallback — needs meaningful output volume
+    let velocityRate = null
+    if (state.velocityChunks.length >= 3) {
+      const oldest = state.velocityChunks[0]
+      const elapsed = (now - oldest.ts) / 1000
+      if (elapsed > 0.4) {
+        const totalChars = state.velocityChunks.reduce((sum, c) => sum + c.chars, 0)
+        const charsPerSec = totalChars / elapsed
+        // Only emit if there's meaningful throughput (> ~2 tok/s worth of chars)
+        if (charsPerSec > 8) {
+          velocityRate = charsPerSec / CHARS_PER_TOKEN_ESTIMATE
+        }
+      }
+    }
+
+    const tokenRate = regexRate !== null ? regexRate : velocityRate
+    const shouldEmit = tokenRate !== null && (now - state.lastVelocityEmitAt >= VELOCITY_EMIT_INTERVAL_MS)
+
+    if (tokenRate !== null && shouldEmit) {
       state.lastTokenRate = tokenRate
       state.noTokenChunkCount = 0
+      state.lastVelocityEmitAt = now
+
       const sessionMeta = this.resolveSessionMeta(sessionId)
       this.dispatchTokenRate({
         ...sessionMeta,
@@ -1032,32 +1111,16 @@ export default class extends Controller {
         path: sessionMeta?.path || this.desktopPathBySessionId.get(sessionId) || this.activePath || null,
         sessionId,
         tokensPerSecond: tokenRate,
-        timestamp: Date.now()
+        source: regexRate !== null ? "regex" : "velocity",
+        timestamp: now
       })
-      console.log(TAG, "token/s detected", {
-        sessionId,
-        path: this.desktopPathBySessionId.get(sessionId) || this.activePath,
-        tokenRate,
-        sample: normalizedText.slice(0, TOKEN_DEBUG_SAMPLE_LIMIT)
-      })
-    } else {
-      state.noTokenChunkCount += 1
-      if (state.noTokenChunkCount % 20 === 0) {
-        console.log(TAG, "token/s not detected in recent output", {
-          sessionId,
-          path: this.desktopPathBySessionId.get(sessionId) || this.activePath,
-          chunkCount: state.noTokenChunkCount,
-          sample: normalizedText.slice(0, TOKEN_DEBUG_SAMPLE_LIMIT)
-        })
-      }
     }
+
+    // ── Below here: opencode-specific tracking (spinner, idle detection) ──
+    if (!state.trackingOpencode) return
 
     if (SHELL_PROMPT_REGEX.test(state.outputTail)) {
       this.resetOpencodeTracking(sessionId)
-      console.log(TAG, "opencode prompt detected, marking idle", {
-        sessionId,
-        path: this.desktopPathBySessionId.get(sessionId) || this.activePath
-      })
       return
     }
 
@@ -1079,13 +1142,11 @@ export default class extends Controller {
         state.outputTail = ""
         state.lastTokenCounter = null
         state.lastTokenCounterAt = 0
+        state.velocityChunks = []
+        state.lastVelocityEmitAt = 0
       }
       this.sessionTimeoutIds.delete(sessionId)
       this.updateBackgroundIndicator()
-      console.log(TAG, "opencode idle timeout", {
-        sessionId,
-        path: this.desktopPathBySessionId.get(sessionId) || this.activePath
-      })
     }, OPENCODE_IDLE_TIMEOUT_MS)
 
     this.sessionTimeoutIds.set(sessionId, timeoutId)
@@ -1144,6 +1205,8 @@ export default class extends Controller {
         state.noTokenChunkCount = 0
         state.lastTokenCounter = null
         state.lastTokenCounterAt = 0
+        state.velocityChunks = []
+        state.lastVelocityEmitAt = 0
       }
       this.clearBackgroundActivity(sessionId)
       this.updateBackgroundIndicator()
@@ -1158,6 +1221,8 @@ export default class extends Controller {
       state.noTokenChunkCount = 0
       state.lastTokenCounter = null
       state.lastTokenCounterAt = 0
+      state.velocityChunks = []
+      state.lastVelocityEmitAt = 0
     }
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
@@ -1224,7 +1289,9 @@ export default class extends Controller {
         lastTokenRate: null,
         noTokenChunkCount: 0,
         lastTokenCounter: null,
-        lastTokenCounterAt: 0
+        lastTokenCounterAt: 0,
+        velocityChunks: [],
+        lastVelocityEmitAt: 0
       })
     }
     return this.sessionStateById.get(key)
