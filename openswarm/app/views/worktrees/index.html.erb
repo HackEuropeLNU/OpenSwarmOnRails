@@ -134,7 +134,7 @@
               <div class="rounded-xl border px-4 py-3 transition-all duration-200 ease-out
                          bg-white/95 backdrop-blur-sm dark:bg-slate-900/95
                          hover:-translate-y-0.5 hover:shadow-lg
-                         <%= wt.dirty ? 'node-glow-dirty border-red-300 bg-red-50/40' :
+                         <%= wt.dirty ? 'node-glow-dirty border-red-300 bg-red-50/40 dark:bg-red-950/30 dark:border-red-800/60' :
                              wt.parent_branch.nil? ? 'node-glow border-amber-300 bg-amber-50/35 dark:bg-amber-950/25 dark:border-amber-700/70' :
                              'node-glow border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-500' %>">
 
@@ -160,10 +160,10 @@
                   <%= wt.state %>
                 </span>
                 <% if wt.ahead > 0 %>
-                  <span class="text-[10px] text-emerald-600 font-mono">+<%= wt.ahead %></span>
+                  <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">+<%= wt.ahead %></span>
                 <% end %>
                 <% if wt.behind > 0 %>
-                  <span class="text-[10px] text-amber-600 font-mono">-<%= wt.behind %></span>
+                  <span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono">-<%= wt.behind %></span>
                 <% end %>
                 <span class="hidden text-[10px] px-1.5 py-0.5 rounded-md border border-sky-300 bg-sky-50 text-sky-700 font-mono leading-none"
                       data-worktree-presence-target="nodeTokenRate"
@@ -215,7 +215,7 @@
 
       <%# ─── Status Overview ─── %>
       <div class="p-4 border-b border-gray-200 dark:border-slate-700">
-        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">overview</h3>
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 mb-3 font-mono">overview</h3>
         <div class="grid grid-cols-3 gap-2">
           <div class="text-center py-2.5 px-2 rounded-lg bg-white border border-gray-200 dark:bg-slate-800/70 dark:border-slate-700">
             <div class="text-base font-semibold text-gray-800 dark:text-slate-100 font-mono leading-none mb-1"><%= @worktrees.length %></div>
@@ -235,30 +235,30 @@
       <%# ─── Selected Worktree Details ─── %>
       <div class="p-4 border-b border-gray-200 dark:border-slate-700" data-graph-keyboard-target="details">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">details</h3>
+          <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 font-mono">details</h3>
           <span class="text-[10px] px-1.5 py-0.5 rounded-md border font-mono <%= node_state_badge_class(@selected_node&.state) %>"
                 data-graph-keyboard-target="detailsState"><%= @selected_node&.state || "n/a" %></span>
         </div>
 
         <dl class="space-y-2.5">
           <div class="flex items-start gap-3">
-            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">branch</dt>
-            <dd class="text-[12px] text-gray-800 font-medium font-mono"
+            <dt class="text-[11px] text-gray-400 dark:text-slate-500 w-12 shrink-0 font-mono">branch</dt>
+            <dd class="text-[12px] text-gray-800 dark:text-slate-100 font-medium font-mono"
                 data-graph-keyboard-target="detailsBranch"><%= @selected_node&.branch || "-" %></dd>
           </div>
           <div class="flex items-start gap-3">
-            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">path</dt>
-            <dd class="text-[11px] text-gray-700 break-all font-mono leading-relaxed"
+            <dt class="text-[11px] text-gray-400 dark:text-slate-500 w-12 shrink-0 font-mono">path</dt>
+            <dd class="text-[11px] text-gray-700 dark:text-slate-300 break-all font-mono leading-relaxed"
                 data-graph-keyboard-target="detailsPath"><%= @selected_node ? format_path(@selected_node.path) : "-" %></dd>
           </div>
           <div class="flex items-start gap-3">
-            <dt class="text-[11px] text-gray-400 w-12 shrink-0 font-mono">HEAD</dt>
-            <dd class="text-[11px] text-gray-700 font-mono"
+            <dt class="text-[11px] text-gray-400 dark:text-slate-500 w-12 shrink-0 font-mono">HEAD</dt>
+            <dd class="text-[11px] text-gray-700 dark:text-slate-300 font-mono"
                 data-graph-keyboard-target="detailsHead"><%= @selected_node ? short_hash(@selected_node.head) : "-" %></dd>
           </div>
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <span class="text-[11px] text-gray-400 font-mono">dirty</span>
+              <span class="text-[11px] text-gray-400 dark:text-slate-500 font-mono">dirty</span>
               <span class="flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full <%= @selected_node&.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"
                       data-graph-keyboard-target="detailsDirtyDot"></span>
@@ -268,12 +268,12 @@
             </div>
             <div class="flex items-center gap-3">
               <span class="text-[11px] font-mono">
-                <span class="text-gray-400">ahead</span>
-                <span class="text-emerald-600 ml-1" data-graph-keyboard-target="detailsAhead"><%= @selected_node&.ahead || 0 %></span>
+                <span class="text-gray-400 dark:text-slate-500">ahead</span>
+                <span class="text-emerald-600 dark:text-emerald-400 ml-1" data-graph-keyboard-target="detailsAhead"><%= @selected_node&.ahead || 0 %></span>
               </span>
               <span class="text-[11px] font-mono">
-                <span class="text-gray-400">behind</span>
-                <span class="text-amber-600 ml-1" data-graph-keyboard-target="detailsBehind"><%= @selected_node&.behind || 0 %></span>
+                <span class="text-gray-400 dark:text-slate-500">behind</span>
+                <span class="text-amber-600 dark:text-amber-400 ml-1" data-graph-keyboard-target="detailsBehind"><%= @selected_node&.behind || 0 %></span>
               </span>
             </div>
           </div>
@@ -282,7 +282,7 @@
 
       <%# ─── Worktree List ─── %>
       <div class="p-4 border-b border-gray-200 dark:border-slate-700">
-        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">worktrees</h3>
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 mb-3 font-mono">worktrees</h3>
         <div class="space-y-0.5">
           <% @worktrees.each do |wt| %>
             <button type="button"
@@ -292,15 +292,15 @@
                data-graph-keyboard-target="listItem">
                <span class="w-1.5 h-1.5 rounded-full shrink-0
                             <%= wt.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"></span>
-               <span class="text-[11px] font-mono truncate text-gray-700" data-node-branch-label>
+               <span class="text-[11px] font-mono truncate text-gray-700 dark:text-slate-300" data-node-branch-label>
                   <%= wt.branch %>
                 </span>
                <span class="ml-auto flex items-center gap-1.5">
                 <% if wt.ahead > 0 %>
-                  <span class="text-[10px] text-emerald-600 font-mono">+<%= wt.ahead %></span>
+                  <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">+<%= wt.ahead %></span>
                 <% end %>
                 <% if wt.behind > 0 %>
-                  <span class="text-[10px] text-amber-600 font-mono">-<%= wt.behind %></span>
+                  <span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono">-<%= wt.behind %></span>
                  <% end %>
                </span>
             </button>
@@ -311,11 +311,11 @@
       <%# ─── Zed Shared Worktree POC ─── %>
       <div class="p-4 border-b border-gray-200 dark:border-slate-700">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 font-mono">zed shared worktrees</h3>
+          <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 font-mono">zed shared worktrees</h3>
           <span class="text-[9px] px-1.5 py-0.5 rounded border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 font-mono">live</span>
         </div>
 
-        <div class="text-[10px] text-gray-400 font-mono mb-3" data-worktree-presence-target="status"></div>
+        <div class="text-[10px] text-gray-400 dark:text-slate-500 font-mono mb-3" data-worktree-presence-target="status"></div>
 
         <form class="grid grid-cols-[1fr_auto] gap-1.5 mb-3"
               data-action="submit->worktree-presence#submitName">
@@ -346,7 +346,7 @@
         <div class="flex items-center gap-1.5 mb-3">
           <input type="text"
                  readonly
-                 class="flex-1 min-w-0 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-mono text-gray-500"
+                 class="flex-1 min-w-0 rounded-md border border-gray-200 bg-gray-100 px-2 py-1 text-[10px] font-mono text-gray-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
                  data-worktree-presence-target="inviteInput" />
           <button type="button"
                   class="px-2 py-1 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[10px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50"
@@ -375,7 +375,7 @@
 
       <%# ─── Actions ─── %>
       <div class="p-4 flex-1">
-        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-3 font-mono">actions</h3>
+        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 mb-3 font-mono">actions</h3>
         <div class="grid grid-cols-2 gap-2 mb-3">
           <button type="button"
                   class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
@@ -384,7 +384,7 @@
             create
           </button>
           <button type="button"
-                  class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 transition-colors"
+                  class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
                   data-action="click->graph-keyboard#deleteSelected"
                   title="Delete selected worktree (d)">
             delete
@@ -406,8 +406,9 @@
             <div class="flex items-center gap-2.5 py-1 group">
               <kbd class="text-[10px] font-mono w-[18px] h-[18px] flex items-center justify-center rounded
                           bg-gray-100 border border-gray-200 text-gray-500 shrink-0
-                          group-hover:text-gray-700 group-hover:border-gray-300 transition-colors"><%= key %></kbd>
-              <span class="text-[11px] text-gray-500 font-mono group-hover:text-gray-700 transition-colors"><%= label %></span>
+                          dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400
+                          group-hover:text-gray-700 group-hover:border-gray-300 dark:group-hover:text-slate-200 dark:group-hover:border-slate-500 transition-colors"><%= key %></kbd>
+              <span class="text-[11px] text-gray-500 dark:text-slate-400 font-mono group-hover:text-gray-700 dark:group-hover:text-slate-200 transition-colors"><%= label %></span>
             </div>
           <% end %>
         </div>
@@ -415,33 +416,33 @@
 
       <%# ─── Footer ─── %>
       <div class="p-3 border-t border-gray-200 dark:border-slate-700 mt-auto">
-        <div class="flex items-center justify-center gap-4 text-[10px] text-gray-400 font-mono">
-          <span><kbd class="text-gray-500">h</kbd>/<kbd class="text-gray-500">j</kbd>/<kbd class="text-gray-500">k</kbd>/<kbd class="text-gray-500">l</kbd> navigate</span>
-          <span class="text-gray-300">·</span>
-          <span><kbd class="text-gray-500">r</kbd> refresh</span>
-          <span class="text-gray-300">·</span>
-          <span><kbd class="text-gray-500">?</kbd> help</span>
+        <div class="flex items-center justify-center gap-4 text-[10px] text-gray-400 dark:text-slate-500 font-mono">
+          <span><kbd class="text-gray-500 dark:text-slate-400">h</kbd>/<kbd class="text-gray-500 dark:text-slate-400">j</kbd>/<kbd class="text-gray-500 dark:text-slate-400">k</kbd>/<kbd class="text-gray-500 dark:text-slate-400">l</kbd> navigate</span>
+          <span class="text-gray-300 dark:text-slate-600">·</span>
+          <span><kbd class="text-gray-500 dark:text-slate-400">r</kbd> refresh</span>
+          <span class="text-gray-300 dark:text-slate-600">·</span>
+          <span><kbd class="text-gray-500 dark:text-slate-400">?</kbd> help</span>
         </div>
       </div>
     </aside>
   </div>
 
   <% if @error %>
-    <div class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-[12px] text-red-700 font-mono shadow-lg z-50">
-      <span class="text-red-600 font-semibold mr-2">error</span><%= @error %>
+    <div class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-50 border border-red-200 dark:bg-red-950/60 dark:border-red-800/60 rounded-xl px-5 py-3 text-[12px] text-red-700 dark:text-red-300 font-mono shadow-lg z-50">
+      <span class="text-red-600 dark:text-red-400 font-semibold mr-2">error</span><%= @error %>
     </div>
   <% end %>
 
   <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
        data-graph-keyboard-target="createModal"
        data-action="click->graph-keyboard#closeDialogBackdrop">
-    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-4"
           data-action="submit->graph-keyboard#submitCreate click->graph-keyboard#closeDialogBackdrop">
-      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">create worktree</h3>
-      <p class="text-[11px] text-gray-500 font-mono mb-3">
-        parent: <span class="text-gray-700" data-graph-keyboard-target="createParent"></span>
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">create worktree</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        parent: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="createParent"></span>
       </p>
-      <label class="block text-[11px] text-gray-500 font-mono mb-1" for="create-worktree-name">branch name</label>
+      <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1" for="create-worktree-name">branch name</label>
       <input id="create-worktree-name"
              type="text"
              required
@@ -451,7 +452,7 @@
              placeholder="feature/my-change" />
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 data-action="click->graph-keyboard#cancelCreate">cancel</button>
         <button type="submit"
                 class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50">create</button>
@@ -462,22 +463,22 @@
   <div class="hidden fixed inset-0 z-[56] bg-black/35 flex items-center justify-center p-4"
        data-graph-keyboard-target="replaceModal"
        data-action="click->graph-keyboard#closeDialogBackdrop">
-    <form class="w-full max-w-md rounded-xl border border-amber-300 bg-white shadow-xl p-4"
+    <form class="w-full max-w-md rounded-xl border border-amber-300 bg-white dark:bg-slate-900 dark:border-amber-700/60 shadow-xl p-4"
           data-action="submit->graph-keyboard#submitReplaceCreate click->graph-keyboard#closeDialogBackdrop">
-      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">worktree already exists</h3>
-      <p class="text-[11px] text-gray-500 font-mono mb-3">
-        branch: <span class="text-gray-700" data-graph-keyboard-target="replaceBranch"></span>
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">worktree already exists</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        branch: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="replaceBranch"></span>
       </p>
-      <p class="text-[11px] text-gray-500 font-mono mb-4">
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-4">
         delete the existing worktree/branch and create a new one?
       </p>
       <div class="flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
                 data-graph-keyboard-target="replaceCancel"
                 data-action="click->graph-keyboard#cancelReplaceCreate">no</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">delete and create</button>
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">delete and create</button>
       </div>
     </form>
   </div>
@@ -485,25 +486,25 @@
   <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
        data-graph-keyboard-target="deleteModal"
        data-action="click->graph-keyboard#closeDialogBackdrop">
-    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-4"
           data-action="submit->graph-keyboard#submitDelete click->graph-keyboard#closeDialogBackdrop">
-      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">delete worktree</h3>
-      <p class="text-[11px] text-gray-500 font-mono mb-1">
-        branch: <span class="text-gray-700" data-graph-keyboard-target="deleteBranch"></span>
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">delete worktree</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1">
+        branch: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="deleteBranch"></span>
       </p>
-      <p class="text-[11px] text-gray-500 font-mono mb-3">
-        dirty: <span class="text-gray-700" data-graph-keyboard-target="deleteDirty"></span>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        dirty: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="deleteDirty"></span>
       </p>
-      <p class="text-[11px] text-gray-500 font-mono mb-1">
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1">
         this worktree will be deleted immediately.
       </p>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
                 data-graph-keyboard-target="deleteCancel"
                 data-action="click->graph-keyboard#cancelDelete">no</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 text-[11px] font-mono hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">yes</button>
+                class="px-2.5 py-1.5 rounded-md border border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80 text-[11px] font-mono hover:bg-red-100 dark:hover:bg-red-900/50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1">yes</button>
       </div>
     </form>
   </div>
@@ -511,13 +512,13 @@
   <div class="hidden fixed inset-0 z-[55] bg-black/35 flex items-center justify-center p-4"
        data-graph-keyboard-target="commitModal"
        data-action="click->graph-keyboard#closeDialogBackdrop">
-    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white shadow-xl p-4"
+    <form class="w-full max-w-md rounded-xl border border-gray-300 bg-white dark:bg-slate-900 dark:border-slate-700 shadow-xl p-4"
           data-action="submit->graph-keyboard#submitCommit click->graph-keyboard#closeDialogBackdrop">
-      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">commit changes</h3>
-      <p class="text-[11px] text-gray-500 font-mono mb-3">
-        branch: <span class="text-gray-700" data-graph-keyboard-target="commitBranch"></span>
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">commit changes</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        branch: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="commitBranch"></span>
       </p>
-      <label class="block text-[11px] text-gray-500 font-mono mb-1" for="commit-message">commit message</label>
+      <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1" for="commit-message">commit message</label>
       <input id="commit-message"
              type="text"
              required
@@ -527,10 +528,10 @@
              placeholder="feat: describe your change" />
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 data-action="click->graph-keyboard#cancelCommit">cancel</button>
         <button type="submit"
-                class="px-2.5 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 text-[11px] font-mono hover:bg-emerald-100">commit</button>
+                class="px-2.5 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60 text-[11px] font-mono hover:bg-emerald-100 dark:hover:bg-emerald-900/50">commit</button>
       </div>
     </form>
   </div>
@@ -538,21 +539,21 @@
   <div class="hidden fixed inset-0 z-[57] bg-black/35 flex items-center justify-center p-4"
        data-graph-keyboard-target="mergeConflictModal"
        data-action="click->graph-keyboard#closeDialogBackdrop">
-    <form class="w-full max-w-lg rounded-xl border border-amber-300 bg-white shadow-xl p-4"
+    <form class="w-full max-w-lg rounded-xl border border-amber-300 bg-white dark:bg-slate-900 dark:border-amber-700/60 shadow-xl p-4"
           data-action="click->graph-keyboard#closeDialogBackdrop">
-      <h3 class="text-[13px] font-semibold text-gray-800 font-mono mb-2">merge conflict detected</h3>
-      <p class="text-[11px] text-gray-500 font-mono mb-1">
-        source: <span class="text-gray-700" data-graph-keyboard-target="mergeConflictSource"></span>
+      <h3 class="text-[13px] font-semibold text-gray-800 dark:text-slate-100 font-mono mb-2">merge conflict detected</h3>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1">
+        source: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="mergeConflictSource"></span>
       </p>
-      <p class="text-[11px] text-gray-500 font-mono mb-3">
-        target: <span class="text-gray-700" data-graph-keyboard-target="mergeConflictTarget"></span>
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-3">
+        target: <span class="text-gray-700 dark:text-slate-200" data-graph-keyboard-target="mergeConflictTarget"></span>
       </p>
-      <p class="text-[11px] text-gray-500 font-mono mb-1">conflicted files</p>
-      <pre class="text-[11px] text-gray-700 font-mono bg-gray-50 border border-gray-200 rounded-md p-2 max-h-40 overflow-auto whitespace-pre-wrap"
+      <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono mb-1">conflicted files</p>
+      <pre class="text-[11px] text-gray-700 dark:text-slate-200 font-mono bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-md p-2 max-h-40 overflow-auto whitespace-pre-wrap"
            data-graph-keyboard-target="mergeConflictFiles"></pre>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button type="button"
-                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
+                class="px-2.5 py-1.5 rounded-md border border-gray-300 text-gray-600 text-[11px] font-mono hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-1"
                 data-graph-keyboard-target="mergeConflictManual"
                 data-action="click->graph-keyboard#cancelMergeConflictResolution">resolve manually</button>
         <button type="button"
