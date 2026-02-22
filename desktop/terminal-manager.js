@@ -194,7 +194,7 @@ class TerminalManager extends EventEmitter {
 
     const limit = Math.max(0, Math.min(Number(maxChars) || DEFAULT_SNAPSHOT_CHARS, MAX_BUFFER_CHARS));
     if (limit === 0) return "";
-    return session.buffer.slice(-limit);
+    return this._safeSnapshotSlice(session.buffer, limit);
   }
 
   destroyAll() {
@@ -232,6 +232,27 @@ class TerminalManager extends EventEmitter {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt
     };
+  }
+
+  _safeSnapshotSlice(buffer, limit) {
+    if (!buffer) return "";
+
+    const startIndex = Math.max(buffer.length - limit, 0);
+    if (startIndex === 0) {
+      return buffer;
+    }
+
+    const newlineIndex = buffer.indexOf("\n", startIndex);
+    if (newlineIndex !== -1 && newlineIndex + 1 < buffer.length) {
+      return buffer.slice(newlineIndex + 1);
+    }
+
+    const carriageReturnIndex = buffer.indexOf("\r", startIndex);
+    if (carriageReturnIndex !== -1 && carriageReturnIndex + 1 < buffer.length) {
+      return buffer.slice(carriageReturnIndex + 1);
+    }
+
+    return buffer.slice(startIndex);
   }
 
   _normalizeCwd(value) {

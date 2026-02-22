@@ -70,19 +70,31 @@ export default class extends Controller {
     this.pendingInitialCommand = null
     this.resizeObserver = null
     this.deferredOutput = ""
+    this.snapshotHydratingSessionId = null
+    this.hydrationDeferredOutput = ""
+    this.repaintRafId = null
+    this.repaintTimeoutId = null
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
     this.escapeHandler = this.handleEscape.bind(this)
     this.toggleHandler = this.togglePanel.bind(this)
     this.focusTerminalHandler = this.focusTerminal.bind(this)
+    this.panelTransitionHandler = this.handlePanelTransitionEnd.bind(this)
+    this.visibilityHandler = this.handleVisibilityChange.bind(this)
+    this.windowFocusHandler = this.handleWindowFocus.bind(this)
 
     window.addEventListener("worktree:open-terminal", this.openHandler)
     window.addEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.addEventListener("resize", this.resizeHandler)
+    window.addEventListener("focus", this.windowFocusHandler)
+    document.addEventListener("visibilitychange", this.visibilityHandler)
     document.addEventListener("keydown", this.escapeHandler)
     if (this.hasTerminalTarget) {
       this.terminalTarget.addEventListener("pointerdown", this.focusTerminalHandler)
+    }
+    if (this.hasPanelTarget) {
+      this.panelTarget.addEventListener("transitionend", this.panelTransitionHandler)
     }
 
     if (typeof ResizeObserver === "function") {
@@ -105,6 +117,13 @@ export default class extends Controller {
 
         if (!this.term) {
           this.queueDeferredOutput(data)
+          this.processTerminalOutput(data, sessionId)
+          desktopTerminal.ack(sessionId, data.length)
+          return
+        }
+
+        if (this.snapshotHydratingSessionId && this.snapshotHydratingSessionId === sessionId) {
+          this.queueHydrationDeferredOutput(data)
           this.processTerminalOutput(data, sessionId)
           desktopTerminal.ack(sessionId, data.length)
           return
@@ -161,9 +180,14 @@ export default class extends Controller {
     window.removeEventListener("worktree:open-terminal", this.openHandler)
     window.removeEventListener("worktree:toggle-terminal", this.toggleHandler)
     window.removeEventListener("resize", this.resizeHandler)
+    window.removeEventListener("focus", this.windowFocusHandler)
+    document.removeEventListener("visibilitychange", this.visibilityHandler)
     document.removeEventListener("keydown", this.escapeHandler)
     if (this.hasTerminalTarget) {
       this.terminalTarget.removeEventListener("pointerdown", this.focusTerminalHandler)
+    }
+    if (this.hasPanelTarget) {
+      this.panelTarget.removeEventListener("transitionend", this.panelTransitionHandler)
     }
 
     if (this.resizeObserver) {
@@ -194,14 +218,8 @@ export default class extends Controller {
     document.documentElement.classList.add("overflow-hidden")
     this.updateBackgroundIndicator()
 
-    // Force reflow and refresh terminal after slide animation completes
-    setTimeout(() => {
-      if (this.term) {
-        this.term.focus()
-        this.term.refresh(0, this.term.rows - 1)
-      }
-      this.resizeTerminal()
-    }, 200)
+    this.scheduleTerminalRepaint({ focus: true })
+    this.scheduleTerminalRepaint({ delayMs: 210, focus: true })
   }
 
   hidePanel() {
@@ -210,6 +228,21 @@ export default class extends Controller {
     this.panelVisible = false
     document.documentElement.classList.remove("overflow-hidden")
     this.updateBackgroundIndicator()
+  }
+
+  handlePanelTransitionEnd(event) {
+    if (event?.target !== this.panelTarget) return
+    if (!this.panelVisible) return
+    this.scheduleTerminalRepaint({ focus: true })
+  }
+
+  handleVisibilityChange() {
+    if (document.visibilityState !== "visible") return
+    this.scheduleTerminalRepaint({ delayMs: 40 })
+  }
+
+  handleWindowFocus() {
+    this.scheduleTerminalRepaint({ delayMs: 20 })
   }
 
   togglePanel() {
@@ -351,14 +384,33 @@ export default class extends Controller {
       return
     }
 
+    if (this.snapshotHydratingSessionId && this.snapshotHydratingSessionId !== sessionId) {
+      this.snapshotHydratingSessionId = null
+      this.hydrationDeferredOutput = ""
+    }
+
+    this.snapshotHydratingSessionId = sessionId
+    this.hydrationDeferredOutput = ""
+
     try {
       const snapshot = await desktopTerminal.snapshot(sessionId, DEFERRED_OUTPUT_LIMIT)
-      if (!snapshot) return
-      this.term.write(snapshot)
-      this.recordOutputActivity(snapshot, sessionId)
-      this.processTerminalOutput(snapshot, sessionId)
+      if (!this.term || this.sessionId !== sessionId) return
+
+      this.term.reset()
+      if (snapshot) {
+        this.term.write(snapshot)
+        this.recordOutputActivity(snapshot, sessionId)
+        this.processTerminalOutput(snapshot, sessionId)
+      }
+
+      this.flushHydrationDeferredOutput(sessionId)
     } catch (error) {
       debug("hydrateDesktopSnapshot failed", { sessionId, error })
+    } finally {
+      if (this.snapshotHydratingSessionId === sessionId) {
+        this.snapshotHydratingSessionId = null
+        this.flushHydrationDeferredOutput(sessionId)
+      }
     }
   }
 
@@ -493,6 +545,7 @@ export default class extends Controller {
     this.term.loadAddon(this.fitAddon)
     this.term.open(this.terminalTarget)
     this.fitAddon.fit()
+    this.flushDeferredOutput()
   }
 
   // ── ActionCable connection (browser mode only) ──
@@ -578,18 +631,48 @@ export default class extends Controller {
     this.deferredOutput = ""
   }
 
+  queueHydrationDeferredOutput(chunk) {
+    if (!chunk) return
+    this.hydrationDeferredOutput = `${this.hydrationDeferredOutput}${chunk}`.slice(-DEFERRED_OUTPUT_LIMIT)
+  }
+
+  flushHydrationDeferredOutput(sessionId) {
+    if (!this.term || !this.hydrationDeferredOutput) return
+    if (sessionId && this.sessionId && sessionId !== this.sessionId) return
+    this.term.write(this.hydrationDeferredOutput)
+    this.hydrationDeferredOutput = ""
+  }
+
+  scheduleTerminalRepaint({ delayMs = 0, focus = false } = {}) {
+    const run = () => {
+      if (!this.term || !this.panelVisible) return
+
+      if (this.fitAddon) {
+        this.fitAddon.fit()
+      }
+      this.term.refresh(0, this.term.rows - 1)
+      if (focus) this.term.focus()
+
+      if (isDesktop && this.sessionId) {
+        desktopTerminal.resize(this.sessionId, this.term.cols, this.term.rows)
+      } else if (this.subscription) {
+        this.subscription.perform("resize", { cols: this.term.cols, rows: this.term.rows })
+      }
+    }
+
+    if (delayMs > 0) {
+      if (this.repaintTimeoutId) clearTimeout(this.repaintTimeoutId)
+      this.repaintTimeoutId = setTimeout(run, delayMs)
+      return
+    }
+
+    if (this.repaintRafId) cancelAnimationFrame(this.repaintRafId)
+    this.repaintRafId = requestAnimationFrame(run)
+  }
+
   resizeTerminal() {
     if (!this.term || !this.fitAddon || !this.panelVisible) return
-
-    this.fitAddon.fit()
-    this.term.refresh(0, this.term.rows - 1)
-
-    if (isDesktop && this.sessionId) {
-      debug("resizeTerminal -> desktop resize", { sessionId: this.sessionId, cols: this.term.cols, rows: this.term.rows })
-      desktopTerminal.resize(this.sessionId, this.term.cols, this.term.rows)
-    } else if (this.subscription) {
-      this.subscription.perform("resize", { cols: this.term.cols, rows: this.term.rows })
-    }
+    this.scheduleTerminalRepaint()
   }
 
   // ── Cleanup ──
@@ -624,6 +707,16 @@ export default class extends Controller {
     this.pendingSessionMeta = null
     this.outputParseCarry = ""
     this.deferredOutput = ""
+    this.snapshotHydratingSessionId = null
+    this.hydrationDeferredOutput = ""
+    if (this.repaintRafId) {
+      cancelAnimationFrame(this.repaintRafId)
+      this.repaintRafId = null
+    }
+    if (this.repaintTimeoutId) {
+      clearTimeout(this.repaintTimeoutId)
+      this.repaintTimeoutId = null
+    }
     if (!this.panelVisible) {
       document.documentElement.classList.remove("overflow-hidden")
     }
