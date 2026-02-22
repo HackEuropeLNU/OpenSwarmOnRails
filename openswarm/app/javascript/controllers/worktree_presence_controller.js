@@ -5,7 +5,7 @@ const HEARTBEAT_MS = 10_000
 const TOKEN_RATE_STALE_MS = 8_000
 
 export default class extends Controller {
-  static targets = ["roster", "nodeBadge", "status", "inviteInput", "nameInput"]
+  static targets = ["roster", "nodeBadge", "nodeTokenRate", "status", "inviteInput", "nameInput"]
 
   static values = {
     repo: String,
@@ -209,6 +209,7 @@ export default class extends Controller {
 
   render() {
     this.renderNodeBadges()
+    this.renderNodeTokenRates()
     this.renderRoster()
   }
 
@@ -235,6 +236,23 @@ export default class extends Controller {
     })
   }
 
+  renderNodeTokenRates() {
+    const now = Date.now()
+    this.nodeTokenRateTargets.forEach((target) => {
+      const worktreeId = target.dataset.worktreeId
+      const tokenRate = this.tokenRateByWorktreeId.get(worktreeId)
+      const isFresh = tokenRate && now - tokenRate.timestamp <= TOKEN_RATE_STALE_MS
+      if (!isFresh) {
+        target.classList.add("hidden")
+        target.textContent = ""
+        return
+      }
+
+      target.classList.remove("hidden")
+      target.textContent = `${tokenRate.tokensPerSecond.toFixed(1)} tok/s`
+    })
+  }
+
   onTokenRate(event) {
     const detail = event?.detail || {}
     const tokensPerSecond = Number(detail.tokensPerSecond)
@@ -249,6 +267,7 @@ export default class extends Controller {
     })
 
     this.renderNodeBadges()
+    this.renderNodeTokenRates()
   }
 
   resolveWorktreeIdFromTokenDetail(detail) {
@@ -268,16 +287,29 @@ export default class extends Controller {
     const normalized = this.normalizePath(path)
     if (!normalized) return null
 
-    const node = document.querySelector(`[data-graph-keyboard-target='node'][data-path='${CSS.escape(normalized)}']`)
-    return node?.dataset?.nodeId || null
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    for (const node of nodes) {
+      const nodePath = this.normalizePath(node?.dataset?.path)
+      if (nodePath === normalized) {
+        return node?.dataset?.nodeId || null
+      }
+    }
+
+    return null
   }
 
   findWorktreeIdByBranch(branch) {
     const normalized = String(branch || "").trim()
     if (!normalized) return null
 
-    const node = document.querySelector(`[data-graph-keyboard-target='node'][data-branch='${CSS.escape(normalized)}']`)
-    return node?.dataset?.nodeId || null
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    for (const node of nodes) {
+      if (String(node?.dataset?.branch || "").trim() === normalized) {
+        return node?.dataset?.nodeId || null
+      }
+    }
+
+    return null
   }
 
   normalizePath(path) {

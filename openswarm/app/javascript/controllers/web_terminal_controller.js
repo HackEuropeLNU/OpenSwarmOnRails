@@ -156,6 +156,9 @@ export default class extends Controller {
             new CustomEvent("worktree:token-rate", {
               detail: {
                 ...sessionMeta,
+                worktreeId: sessionMeta?.worktreeId || null,
+                branch: sessionMeta?.branch || null,
+                path: sessionMeta?.path || payload?.cwd || null,
                 sessionId,
                 tokensPerSecond: tokenPerSec,
                 inputChars: Number(payload?.inputChars) || 0,
