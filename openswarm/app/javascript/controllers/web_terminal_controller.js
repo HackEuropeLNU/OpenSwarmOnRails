@@ -36,6 +36,11 @@ const TOKEN_RATE_PATTERNS = [
   /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
 ]
 const TOKEN_UI_STALE_MS = 8_000
+const TOKEN_RATE_METRIC_STORAGE_KEY = "openswarm.tokenRateMetric"
+const TOKEN_RATE_METRIC_TOKENS = "tokens"
+const TOKEN_RATE_METRIC_DOLLARS = "dollars"
+const USD_PER_MTOK = 5
+const TOKENS_PER_MTOK = 1_000_000
 const CHARS_PER_TOKEN_ESTIMATE = 4
 const VELOCITY_WINDOW_MS = 2000
 const VELOCITY_EMIT_INTERVAL_MS = 800
@@ -895,7 +900,29 @@ export default class extends Controller {
     })
 
     badge.classList.remove("hidden")
-    badge.textContent = `${tokensPerSecond.toFixed(1)} tok/s`
+    badge.textContent = this.formatTokenRate(tokensPerSecond)
+  }
+
+  formatTokenRate(tokensPerSecond) {
+    if (this.loadTokenRateMetric() === TOKEN_RATE_METRIC_DOLLARS) {
+      const dollarsPerSecond = (tokensPerSecond * USD_PER_MTOK) / TOKENS_PER_MTOK
+      return `$${dollarsPerSecond.toFixed(4)}/s`
+    }
+
+    return `${tokensPerSecond.toFixed(1)} tok/s`
+  }
+
+  loadTokenRateMetric() {
+    try {
+      const stored = String(window.localStorage.getItem(TOKEN_RATE_METRIC_STORAGE_KEY) || "").trim().toLowerCase()
+      if (stored === TOKEN_RATE_METRIC_DOLLARS || stored === TOKEN_RATE_METRIC_TOKENS) {
+        return stored
+      }
+    } catch (_error) {
+      // ignored
+    }
+
+    return TOKEN_RATE_METRIC_TOKENS
   }
 
   findWorktreeIdByPathSuffix(targetPath) {
