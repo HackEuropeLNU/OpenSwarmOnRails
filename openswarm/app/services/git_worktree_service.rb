@@ -694,6 +694,8 @@ class GitWorktreeService
         wt.dirty = status_output && !status_output.strip.empty?
 
         has_upstream = false
+        upstream_ahead = 0
+        upstream_behind = 0
 
         # Check ahead/behind relative to remote tracking branch
         tracking = git(wt.path, "rev-parse", "--abbrev-ref", "#{wt.branch}@{upstream}")
@@ -702,8 +704,10 @@ class GitWorktreeService
           rev_list = git(wt.path, "rev-list", "--left-right", "--count", "#{wt.branch}...#{tracking.strip}")
           if rev_list
             parts = rev_list.strip.split(/\s+/)
-            wt.ahead = parts[0].to_i
-            wt.behind = parts[1].to_i
+            upstream_ahead = parts[0].to_i
+            upstream_behind = parts[1].to_i
+            wt.ahead = upstream_ahead
+            wt.behind = upstream_behind
           end
         end
 
@@ -722,12 +726,14 @@ class GitWorktreeService
           "detached"
         elsif wt.dirty
           "dirty"
+        elsif has_upstream && upstream_behind > 0
+          "behind head"
         elsif wt.behind > 0
           wt.parent_branch.nil? ? "behind head" : "behind parent"
+        elsif has_upstream && upstream_ahead == 0
+          "pushed"
         elsif wt.ahead > 0
           "committed"
-        elsif has_upstream
-          "pushed"
         else
           "local only"
         end
