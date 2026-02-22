@@ -226,13 +226,7 @@ export default class extends Controller {
         return member?.branch && member.branch === branch
       })
 
-      const pills = members.map((member) => this.memberPill(member, labels))
-      const tokenRate = this.tokenRateByWorktreeId.get(worktreeId)
-      if (tokenRate && now - tokenRate.timestamp <= TOKEN_RATE_STALE_MS) {
-        pills.push(this.tokenRatePill(tokenRate.tokensPerSecond))
-      }
-
-      target.innerHTML = pills.join("")
+      target.innerHTML = members.map((member) => this.memberPill(member, labels)).join("")
     })
   }
 
