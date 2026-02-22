@@ -18,6 +18,12 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const MAX_BUFFER_CHARS = 200000;
 const DEFAULT_SNAPSHOT_CHARS = 100000;
+const TOKEN_RATE_LOG_MIN_INTERVAL_MS = 1000;
+const TOKEN_RATE_PATTERNS = [
+  /(\d+(?:\.\d+)?)\s*(?:tok|token|tokens)\s*\/\s*s\b/gi,
+  /\b(?:tok|token|tokens)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
+  /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
+];
 
 const SHELL_LOGIN_ARG_BY_BASENAME = {
   bash: ["-il"],
@@ -85,7 +91,12 @@ class TerminalManager extends EventEmitter {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       dataDisposable: null,
-      exitDisposable: null
+      exitDisposable: null,
+      parseCarry: "",
+      inputChars: 0,
+      outputChars: 0,
+      lastTokenRate: null,
+      lastTokenRateLogAt: 0
     };
 
     let dataChunks = 0;
@@ -100,6 +111,30 @@ class TerminalManager extends EventEmitter {
       session.buffer = `${session.buffer}${data}`.slice(-MAX_BUFFER_CHARS);
       session.updatedAt = Date.now();
       session.unackedChars += data.length;
+      session.outputChars += data.length;
+
+      const tokenRate = this._extractTokenRate(session, data);
+      if (tokenRate !== null) {
+        const now = Date.now();
+        const enoughTimeElapsed = now - session.lastTokenRateLogAt >= TOKEN_RATE_LOG_MIN_INTERVAL_MS;
+        const changedRate = session.lastTokenRate !== tokenRate;
+        session.lastTokenRate = tokenRate;
+
+        if (changedRate || enoughTimeElapsed) {
+          session.lastTokenRateLogAt = now;
+          console.log(
+            `[METRIC:tokens] session=${sessionId} token_per_sec=${tokenRate.toFixed(2)} input_chars=${session.inputChars} output_chars=${session.outputChars} cwd=${session.cwd}`
+          );
+          this.emit("metrics", {
+            sessionId,
+            cwd: session.cwd,
+            tokenPerSec: tokenRate,
+            inputChars: session.inputChars,
+            outputChars: session.outputChars,
+            timestamp: now
+          });
+        }
+      }
 
       if (!session.paused && session.unackedChars > HIGH_WATERMARK) {
         debug("PAUSING pty - unackedChars:", session.unackedChars, "sessionId:", sessionId);
@@ -132,6 +167,7 @@ class TerminalManager extends EventEmitter {
       debug("write() - session not found or exited, sessionId:", sessionId);
       return false;
     }
+    session.inputChars += (data || "").length;
     session.pty.write(data);
     return true;
   }
@@ -334,6 +370,30 @@ class TerminalManager extends EventEmitter {
 
   _clampRows(rows) {
     return Math.max(4, Math.min(Number(rows) || DEFAULT_ROWS, 500));
+  }
+
+  _extractTokenRate(session, chunk) {
+    if (!chunk) return null;
+
+    const normalized = this._stripAnsi(chunk).replace(/\r(?!\n)/g, "\n");
+    session.parseCarry = `${session.parseCarry}${normalized}`.slice(-3000);
+
+    const matches = [];
+    for (const pattern of TOKEN_RATE_PATTERNS) {
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(session.parseCarry)) !== null) {
+        const parsed = Number(match[1]);
+        if (Number.isFinite(parsed) && parsed >= 0) matches.push(parsed);
+      }
+    }
+
+    if (matches.length === 0) return null;
+    return matches[matches.length - 1];
+  }
+
+  _stripAnsi(text) {
+    return text.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g, "");
   }
 }
 

@@ -70,6 +70,17 @@ contextBridge.exposeInMainWorld("desktopShell", {
         debug("terminal.onExit unsubscribed");
         ipcRenderer.removeListener("terminal:exit", handler);
       };
+    },
+
+    /** Subscribe to terminal token and io metrics. */
+    onMetrics: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      debug("terminal.onMetrics subscribed");
+      ipcRenderer.on("terminal:metrics", handler);
+      return () => {
+        debug("terminal.onMetrics unsubscribed");
+        ipcRenderer.removeListener("terminal:metrics", handler);
+      };
     }
   }
 });

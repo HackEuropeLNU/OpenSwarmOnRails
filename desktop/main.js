@@ -39,6 +39,10 @@ terminalManager.on("exit", ({ sessionId, exitCode }) => {
   broadcastToWindows("terminal:exit", { sessionId, exitCode });
 });
 
+terminalManager.on("metrics", (payload) => {
+  broadcastToWindows("terminal:metrics", payload);
+});
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitForBackend(url, timeoutMs) {
