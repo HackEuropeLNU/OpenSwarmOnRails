@@ -64,3 +64,8 @@ bin/ci
 ```
 
 This runs setup plus style and security checks used by the project.
+
+## Troubleshooting
+
+- If `http://localhost:3000` does not load, verify `make dev-backend` is still running and no other app is using port `3000`.
+- If no repositories appear in the UI, set `OPENSWARM_REPO_ROOTS` to explicit absolute paths and restart the server.
