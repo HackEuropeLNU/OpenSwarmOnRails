@@ -281,34 +281,6 @@
         </dl>
       </div>
 
-      <%# ─── Worktree List ─── %>
-      <div class="p-4 border-b border-gray-200 dark:border-slate-700">
-        <h3 class="text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-slate-500 mb-3 font-mono">worktrees</h3>
-        <div class="space-y-0.5">
-          <% @worktrees.each do |wt| %>
-            <button type="button"
-               class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all duration-150 border border-transparent hover:bg-gray-100 dark:hover:bg-slate-800/70"
-               data-node-id="<%= wt.id %>"
-               data-action="click->graph-keyboard#selectFromList"
-               data-graph-keyboard-target="listItem">
-               <span class="w-1.5 h-1.5 rounded-full shrink-0
-                            <%= wt.dirty ? 'bg-red-500' : 'bg-emerald-500' %>"></span>
-               <span class="text-[11px] font-mono truncate text-gray-700 dark:text-slate-300" data-node-branch-label>
-                  <%= wt.branch %>
-                </span>
-               <span class="ml-auto flex items-center gap-1.5">
-                <% if wt.ahead > 0 %>
-                  <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">+<%= wt.ahead %></span>
-                <% end %>
-                <% if wt.behind > 0 %>
-                  <span class="text-[10px] text-amber-600 dark:text-amber-400 font-mono">-<%= wt.behind %></span>
-                 <% end %>
-               </span>
-            </button>
-          <% end %>
-        </div>
-      </div>
-
       <%# ─── Zed Shared Worktree POC ─── %>
       <div class="p-4 border-b border-gray-200 dark:border-slate-700">
         <div class="flex items-center justify-between mb-3">
