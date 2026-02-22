@@ -66,3 +66,14 @@ bin/ci
 ```
 
 `bin/ci` runs setup plus style and security checks used by this project.
+
+## Troubleshooting
+
+- Port already in use: stop any process on `3000` before running `make dev-backend`.
+- Missing gems or npm packages: rerun `bin/setup --skip-server` inside `openswarm/`.
+- Repo scan is too broad: set `OPENSWARM_REPO_ROOTS` to a small list of absolute paths.
+- Electron app does not launch: run `make electron-clean` and then `make electron-dev`.
+
+## Contributing
+
+Contributions are welcome. Keep changes focused, run `bin/ci` in `openswarm/`, and include clear commit messages that explain why the change is needed.
