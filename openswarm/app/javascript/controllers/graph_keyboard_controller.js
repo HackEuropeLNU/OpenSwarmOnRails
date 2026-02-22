@@ -333,11 +333,16 @@ export default class extends Controller {
       const label = item.querySelector("[data-node-branch-label]")
 
       item.classList.toggle("bg-red-50", isSelected)
+      item.classList.toggle("dark:bg-red-950/30", isSelected)
       item.classList.toggle("border-red-200", isSelected)
+      item.classList.toggle("dark:border-red-900/80", isSelected)
       item.classList.toggle("hover:bg-gray-100", !isSelected)
+      item.classList.toggle("dark:hover:bg-slate-800/70", !isSelected)
       if (label) {
         label.classList.toggle("text-gray-800", isSelected)
+        label.classList.toggle("dark:text-red-200", isSelected)
         label.classList.toggle("text-gray-500", !isSelected)
+        label.classList.toggle("dark:text-slate-300", !isSelected)
       }
     })
 
