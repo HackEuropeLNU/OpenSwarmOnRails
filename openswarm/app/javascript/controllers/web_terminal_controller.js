@@ -19,6 +19,8 @@ const DEFERRED_OUTPUT_LIMIT = 200000
 const OPENCODE_SPINNER_REGEX = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/
 const OPENCODE_IDLE_TIMEOUT_MS = 1500
 const SHELL_PROMPT_REGEX = /(?:\r?\n|^)[^\r\n]*[%$#] $/
+const INITIAL_COMMAND_RETRY_MS = 120
+const INITIAL_COMMAND_MAX_WAIT_MS = 4000
 const TOKEN_RATE_REGEXES = [
   /(\d+(?:\.\d+)?)\s*(?:tok|token|tokens)\s*\/\s*s\b/i,
   /(\d+(?:\.\d+)?)\s*(?:tok|token|tokens)\s*per\s*sec(?:ond)?\b/i,
@@ -81,6 +83,8 @@ export default class extends Controller {
     this.sessionMetaById = new Map()
     this.pendingSessionMeta = null
     this.pendingInitialCommand = null
+    this.pendingInitialCommandDeadlineAt = 0
+    this.pendingInitialCommandTimerId = null
     this.resizeObserver = null
     this.deferredOutput = ""
     this.snapshotHydratingSessionId = null
@@ -237,6 +241,7 @@ export default class extends Controller {
     this.ipcCleanups = []
 
     this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
+    this.clearPendingInitialCommandTimer()
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
     document.documentElement.classList.remove("overflow-hidden")
@@ -316,11 +321,15 @@ export default class extends Controller {
   openFromEvent(event) {
     const payload = event.detail || {}
     debug("openFromEvent", payload)
+    this.clearPendingInitialCommandTimer()
     this.pendingSessionMeta = this.buildSessionMeta(payload)
     this.pendingInitialCommand =
       typeof payload.initialCommand === "string" && payload.initialCommand.trim().length > 0
         ? payload.initialCommand
         : null
+    this.pendingInitialCommandDeadlineAt = this.pendingInitialCommand
+      ? Date.now() + INITIAL_COMMAND_MAX_WAIT_MS
+      : 0
 
     // Desktop mode: payload has `path` from the worktree, we create PTY directly
     if (isDesktop) {
@@ -751,6 +760,7 @@ export default class extends Controller {
     }
 
     this.disconnectSubscription({ closeRemote: closeRemoteBrowser })
+    this.clearPendingInitialCommandTimer()
     if (closingSessionId) this.sessionMetaById.delete(closingSessionId)
     this.sessionId = null
     this.activePath = null
@@ -1088,6 +1098,8 @@ export default class extends Controller {
       state.outputTail = state.outputTail.slice(-2048)
     }
 
+    this.maybeRunPendingInitialCommand(sessionId)
+
     // ── Character velocity tracking — runs ALWAYS, not gated on trackingOpencode ──
     const now = Date.now()
     const normalizedText = this.stripAnsi(text)
@@ -1364,18 +1376,65 @@ export default class extends Controller {
     return text.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g, "")
   }
 
-  runPendingInitialCommand(sessionId = this.sessionId) {
+  clearPendingInitialCommandTimer() {
+    if (!this.pendingInitialCommandTimerId) return
+    clearTimeout(this.pendingInitialCommandTimerId)
+    this.pendingInitialCommandTimerId = null
+  }
+
+  maybeRunPendingInitialCommand(sessionId = this.sessionId) {
+    if (!this.pendingInitialCommand) return
+    if (!sessionId || sessionId !== this.sessionId) return
+    this.runPendingInitialCommand(sessionId)
+  }
+
+  isShellPromptReady(sessionId = this.sessionId) {
+    const state = this.getSessionState(sessionId)
+    const tail = String(state?.outputTail || "")
+    return SHELL_PROMPT_REGEX.test(tail)
+  }
+
+  schedulePendingInitialCommand(sessionId = this.sessionId) {
+    if (!this.pendingInitialCommand || !sessionId) return
+    if (this.pendingInitialCommandTimerId) return
+
+    this.pendingInitialCommandTimerId = window.setTimeout(() => {
+      this.pendingInitialCommandTimerId = null
+      if (!this.pendingInitialCommand) return
+      const timedOut = this.pendingInitialCommandDeadlineAt > 0 && Date.now() >= this.pendingInitialCommandDeadlineAt
+      this.runPendingInitialCommand(sessionId, { force: timedOut })
+    }, INITIAL_COMMAND_RETRY_MS)
+  }
+
+  runPendingInitialCommand(sessionId = this.sessionId, { force = false } = {}) {
     const command = this.pendingInitialCommand
     if (!command || !sessionId) return
 
-    const payload = command.endsWith("\r") ? command : `${command}\r`
-    if (isDesktop) {
-      desktopTerminal.write(sessionId, payload)
-    } else if (this.subscription) {
-      this.subscription.perform("input", { data: payload })
+    const timedOut = this.pendingInitialCommandDeadlineAt > 0 && Date.now() >= this.pendingInitialCommandDeadlineAt
+    const ready = this.isShellPromptReady(sessionId)
+    if (!force && !timedOut && !ready) {
+      this.schedulePendingInitialCommand(sessionId)
+      return
     }
 
+    const payload = command.endsWith("\r") ? command : `${command}\r`
+    let written = false
+    if (isDesktop) {
+      desktopTerminal.write(sessionId, payload)
+      written = true
+    } else if (this.subscription) {
+      this.subscription.perform("input", { data: payload })
+      written = true
+    }
+
+    if (!written) {
+      this.schedulePendingInitialCommand(sessionId)
+      return
+    }
+
+    this.clearPendingInitialCommandTimer()
     this.pendingInitialCommand = null
+    this.pendingInitialCommandDeadlineAt = 0
   }
 
   normalizePath(path) {
