@@ -4,7 +4,7 @@
 <% end %>
 
 <div class="w-full h-screen flex flex-col overflow-hidden"
-     data-controller="graph-keyboard theme web-terminal"
+     data-controller="graph-keyboard theme web-terminal terminal-settings"
      data-theme-target="root"
      data-graph-keyboard-selected-value="<%= @selected_id %>"
      data-graph-keyboard-repo-value="<%= @selected_repo&.dig(:name) %>"
@@ -60,6 +60,12 @@
               title="Refresh worktrees (r)"
               data-action="click->graph-keyboard#refresh">
         refresh
+      </button>
+      <button type="button"
+              class="text-[11px] font-mono px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all duration-150"
+              title="Terminal settings"
+              data-action="click->terminal-settings#openModal">
+        terminal: <span data-terminal-settings-target="currentLabel" class="text-gray-700">Built-in</span>
       </button>
     </div>
   </header>
@@ -474,6 +480,43 @@
     </form>
   </div>
 
+  <%# ═══ Terminal Settings Modal ═══ %>
+  <div class="fixed inset-0 z-[70] items-center justify-center bg-black/50 transition-opacity duration-200 hidden"
+       data-terminal-settings-target="modal"
+       data-action="click->terminal-settings#backdropClose keydown->terminal-settings#handleKeydown"
+       >
+    <div class="bg-white rounded-xl shadow-2xl border border-gray-200 w-[420px] max-w-[90vw] overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <h2 class="text-[14px] font-semibold text-gray-800">Terminal Settings</h2>
+        <p class="text-[11px] text-gray-500 mt-1">Choose which terminal application to use when opening a terminal for a worktree.</p>
+      </div>
+      <div class="px-5 py-4">
+        <label class="block text-[11px] font-mono text-gray-600 mb-1.5">Terminal Application</label>
+        <select data-terminal-settings-target="terminalSelect"
+                class="w-full text-[12px] font-mono px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+          <option value="built-in">Built-in Terminal (xterm.js)</option>
+          <option value="system-default">System Default Terminal</option>
+        </select>
+        <p class="text-[10px] text-gray-400 mt-1.5">
+          Select "Built-in" to use the in-app terminal panel, or choose an external terminal application.
+        </p>
+        <div data-terminal-settings-target="statusMessage" class="text-[11px] font-mono mt-2"></div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+        <button type="button"
+                class="text-[11px] font-mono px-3 py-1.5 rounded-md border border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                data-action="click->terminal-settings#closeModal">
+          Cancel
+        </button>
+        <button type="button"
+                class="text-[11px] font-mono px-3 py-1.5 rounded-md border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                data-action="click->terminal-settings#saveSettings">
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+
   <%# ═══ Terminal overlay - visibility-based hide/show (no display:none) ═══ %>
   <div class="terminal-panel"
        data-visible="false"
@@ -482,8 +525,14 @@
     <div class="terminal-container" data-web-terminal-target="container">
       <div class="terminal-header">
         <div class="terminal-dots">
-          <span class="terminal-dot terminal-dot-red"></span>
-          <span class="terminal-dot terminal-dot-yellow"></span>
+          <button type="button"
+                  class="terminal-dot terminal-dot-red"
+                  data-action="click->web-terminal#killTerminal"
+                  title="Kill terminal session"></button>
+          <button type="button"
+                  class="terminal-dot terminal-dot-yellow"
+                  data-action="click->web-terminal#closePanel"
+                  title="Minimize (Ctrl+G)"></button>
           <span class="terminal-dot terminal-dot-green"></span>
         </div>
         <div class="terminal-path">
@@ -492,14 +541,6 @@
         <div class="terminal-controls">
           <span class="terminal-badge hidden sm:inline-flex">shell: <span class="ml-1" data-web-terminal-target="shell"></span></span>
           <span class="terminal-badge">status: <span class="ml-1" data-web-terminal-target="status">idle</span></span>
-          <button type="button"
-                  class="terminal-btn"
-                  data-action="click->web-terminal#closePanel"
-                  title="Minimize (Ctrl+G)">minimize</button>
-          <button type="button"
-                  class="terminal-btn terminal-btn-kill"
-                  data-action="click->web-terminal#killTerminal"
-                  title="Kill terminal session">kill</button>
         </div>
       </div>
       <div class="terminal-body">

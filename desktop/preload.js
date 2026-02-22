@@ -12,6 +12,43 @@ contextBridge.exposeInMainWorld("desktopShell", {
   platform: process.platform,
   pickGitRepo: () => ipcRenderer.invoke("dialog:pick-git-repo"),
 
+  // ── Settings API ──
+  settings: {
+    /** Get a setting value by key. */
+    get: (key) => ipcRenderer.invoke("settings:get", { key }),
+
+    /** Set a setting value by key. */
+    set: (key, value) => ipcRenderer.invoke("settings:set", { key, value }),
+
+    /** Get all settings. */
+    getAll: () => ipcRenderer.invoke("settings:getAll")
+  },
+
+  // ── External Terminal API ──
+  externalTerminal: {
+    /**
+     * Open an external terminal application at the given directory.
+     * @param {{ cwd: string, terminalId?: string }} opts
+     * @returns {Promise<{ success: boolean, error?: string }>}
+     */
+    open: (opts) => {
+      debug("externalTerminal.open", opts);
+      return ipcRenderer.invoke("terminal:open-external", opts);
+    },
+
+    /** Detect installed terminal applications. Returns array of { id, name }. */
+    detectInstalled: () => {
+      debug("externalTerminal.detectInstalled");
+      return ipcRenderer.invoke("terminal:detect-installed");
+    },
+
+    /** Get the system default terminal id. */
+    getSystemDefault: () => {
+      debug("externalTerminal.getSystemDefault");
+      return ipcRenderer.invoke("terminal:get-system-default");
+    }
+  },
+
   // ── Terminal API (node-pty via Electron main process) ──
   terminal: {
     /**

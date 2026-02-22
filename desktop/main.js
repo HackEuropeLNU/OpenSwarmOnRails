@@ -1,5 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron");
 const { TerminalManager } = require("./terminal-manager");
+const { openExternalTerminal, detectInstalledTerminals, getSystemDefaultTerminal } = require("./external-terminal");
+const { getSetting, setSetting, loadSettings } = require("./settings");
 const { execFile } = require("node:child_process");
 
 const TAG = "[DEBUG:main]";
@@ -163,6 +165,41 @@ function setupTerminalIPC() {
 
   ipcMain.handle("terminal:snapshot", (_event, { sessionId, maxChars }) => {
     return terminalManager.snapshot(sessionId, maxChars);
+  });
+
+  // ── External terminal IPC handlers ──
+
+  ipcMain.handle("terminal:open-external", async (_event, { cwd, terminalId }) => {
+    debug("IPC terminal:open-external", { cwd, terminalId });
+    const resolvedTerminalId = terminalId || getSetting("terminalMode") || "system-default";
+    return openExternalTerminal(cwd, resolvedTerminalId);
+  });
+
+  ipcMain.handle("terminal:detect-installed", () => {
+    debug("IPC terminal:detect-installed");
+    return detectInstalledTerminals();
+  });
+
+  ipcMain.handle("terminal:get-system-default", () => {
+    debug("IPC terminal:get-system-default");
+    return getSystemDefaultTerminal();
+  });
+
+  // ── Settings IPC handlers ──
+
+  ipcMain.handle("settings:get", (_event, { key }) => {
+    debug("IPC settings:get", { key });
+    return getSetting(key);
+  });
+
+  ipcMain.handle("settings:set", (_event, { key, value }) => {
+    debug("IPC settings:set", { key, value });
+    return setSetting(key, value);
+  });
+
+  ipcMain.handle("settings:getAll", () => {
+    debug("IPC settings:getAll");
+    return loadSettings();
   });
 
   ipcMain.handle("dialog:pick-git-repo", async () => {

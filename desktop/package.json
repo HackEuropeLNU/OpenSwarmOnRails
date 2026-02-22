@@ -28,6 +28,8 @@
       "main.js",
       "preload.js",
       "terminal-manager.js",
+      "external-terminal.js",
+      "settings.js",
       "package.json"
     ],
     "mac": {
