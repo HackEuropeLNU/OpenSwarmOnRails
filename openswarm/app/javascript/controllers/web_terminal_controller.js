@@ -25,6 +25,10 @@ const TOKEN_RATE_REGEXES = [
   /\b(?:tok|token|tokens)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/i,
   /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/i
 ]
+const TOKEN_COUNTER_REGEXES = [
+  /\bkcount\s*[:=]\s*(\d+(?:\.\d+)?)/i,
+  /\btoken(?:s)?\s*(?:count|total)?\s*[:=]\s*(\d+(?:\.\d+)?)/i
+]
 const TOKEN_DEBUG_SAMPLE_LIMIT = 120
 const TOKEN_RATE_PATTERNS = [
   /(\d+(?:\.\d+)?)\s*(?:tokens?|tok)\s*\/\s*s\b/gi,
@@ -967,6 +971,8 @@ export default class extends Controller {
           state.outputTail = ""
           state.lastTokenRate = null
           state.noTokenChunkCount = 0
+          state.lastTokenCounter = null
+          state.lastTokenCounterAt = 0
           this.runningSessionIds.delete(sessionId)
           this.updateBackgroundIndicator()
           console.log(TAG, "opencode start detected", { sessionId, path: this.desktopPathBySessionId.get(sessionId) || this.activePath })
@@ -1013,11 +1019,21 @@ export default class extends Controller {
     }
 
     const normalizedText = this.stripAnsi(text)
-    const tokenRate = this.extractTokenRate(normalizedText)
+    const tokenRate = this.extractTokenRate(normalizedText, state)
 
     if (tokenRate !== null) {
       state.lastTokenRate = tokenRate
       state.noTokenChunkCount = 0
+      const sessionMeta = this.resolveSessionMeta(sessionId)
+      this.dispatchTokenRate({
+        ...sessionMeta,
+        worktreeId: sessionMeta?.worktreeId || null,
+        branch: sessionMeta?.branch || null,
+        path: sessionMeta?.path || this.desktopPathBySessionId.get(sessionId) || this.activePath || null,
+        sessionId,
+        tokensPerSecond: tokenRate,
+        timestamp: Date.now()
+      })
       console.log(TAG, "token/s detected", {
         sessionId,
         path: this.desktopPathBySessionId.get(sessionId) || this.activePath,
@@ -1061,6 +1077,8 @@ export default class extends Controller {
       if (state) {
         state.trackingOpencode = false
         state.outputTail = ""
+        state.lastTokenCounter = null
+        state.lastTokenCounterAt = 0
       }
       this.sessionTimeoutIds.delete(sessionId)
       this.updateBackgroundIndicator()
@@ -1124,6 +1142,8 @@ export default class extends Controller {
         state.outputTail = ""
         state.lastTokenRate = null
         state.noTokenChunkCount = 0
+        state.lastTokenCounter = null
+        state.lastTokenCounterAt = 0
       }
       this.clearBackgroundActivity(sessionId)
       this.updateBackgroundIndicator()
@@ -1136,6 +1156,8 @@ export default class extends Controller {
       state.outputTail = ""
       state.lastTokenRate = null
       state.noTokenChunkCount = 0
+      state.lastTokenCounter = null
+      state.lastTokenCounterAt = 0
     }
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
@@ -1200,13 +1222,15 @@ export default class extends Controller {
         inputBuffer: "",
         outputTail: "",
         lastTokenRate: null,
-        noTokenChunkCount: 0
+        noTokenChunkCount: 0,
+        lastTokenCounter: null,
+        lastTokenCounterAt: 0
       })
     }
     return this.sessionStateById.get(key)
   }
 
-  extractTokenRate(text) {
+  extractTokenRate(text, state = null) {
     if (!text) return null
     for (const regex of TOKEN_RATE_REGEXES) {
       const match = text.match(regex)
@@ -1214,6 +1238,31 @@ export default class extends Controller {
       const parsed = Number.parseFloat(match[1])
       if (Number.isFinite(parsed)) return parsed
     }
+
+    const now = Date.now()
+    for (const regex of TOKEN_COUNTER_REGEXES) {
+      const match = text.match(regex)
+      if (!match) continue
+      const counter = Number.parseFloat(match[1])
+      if (!Number.isFinite(counter) || counter < 0) continue
+      if (!state) return null
+
+      if (Number.isFinite(state.lastTokenCounter) && state.lastTokenCounterAt > 0) {
+        const deltaTokens = counter - state.lastTokenCounter
+        const deltaSeconds = (now - state.lastTokenCounterAt) / 1000
+        state.lastTokenCounter = counter
+        state.lastTokenCounterAt = now
+        if (deltaTokens > 0 && deltaSeconds > 0.2) {
+          return deltaTokens / deltaSeconds
+        }
+        return null
+      }
+
+      state.lastTokenCounter = counter
+      state.lastTokenCounterAt = now
+      return null
+    }
+
     return null
   }
 
