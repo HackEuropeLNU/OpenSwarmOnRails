@@ -32,20 +32,23 @@ class PromptTemplateService
       Instructions:
       1) Analyze the feature request and determine what worktrees are needed.
       2) Do NOT output a JSON plan. Create the worktrees directly.
-      3) Consider splitting worktrees by:
+      3) Always create exactly one first-level child from the main parent worktree, then create all remaining worktrees as children of that first-level child (a two-level hierarchy).
+      4) Consider splitting worktrees by:
          - Frontend vs Backend concerns
          - API contracts vs implementation
          - Database/migrations vs application code
          - Configuration vs feature code
-      4) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations").
-      5) Determine the current parent branch from the parent worktree.
-      6) Use this command pattern for every planned worktree:
-         git -C "{parent_path}" worktree add -b "<branch-name>" "$(dirname "{parent_path}")/<branch-name-with-slashes-replaced-by-dashes>" "<current-parent-branch>"
-      7) You must execute the commands. Do not stop after planning.
-      8) After creating all worktrees, run:
-         git -C "{parent_path}" worktree list
-      9) Report what you created as a concise human-readable list (branch -> path).
-      10) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
+      5) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations").
+      6) Determine the current parent branch from the main parent worktree.
+      7) Create the first-level child from the main parent branch using:
+         git -C "{parent_path}" worktree add -b "<first-child-branch>" "$(dirname "{parent_path}")/<first-child-branch-with-slashes-replaced-by-dashes>" "<main-parent-branch>"
+      8) For every remaining child worktree, branch from the first-level child branch (not from main) using:
+         git -C "{parent_path}" worktree add -b "<child-branch>" "$(dirname "{parent_path}")/<child-branch-with-slashes-replaced-by-dashes>" "<first-child-branch>"
+      9) You must execute the commands. Do not stop after planning.
+      10) After creating all worktrees, run:
+          git -C "{parent_path}" worktree list
+      11) Report what you created as a concise human-readable list including hierarchy (main -> first child -> other children with branch and path).
+      12) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
     PROMPT
   }.freeze
 
