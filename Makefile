@@ -1,6 +1,7 @@
 .PHONY: dev dev-backend dev-frontend electron-install electron-dev electron-dmg electron-clean
 
 BACKEND_PORT ?= 3000
+BACKEND_BIND ?= 0.0.0.0
 FRONTEND_PORT ?= 4173
 OPENSWARMONRAILS_DIR ?= openswarm
 ELECTRON_DIR ?= desktop
@@ -32,11 +33,11 @@ electron-install:
 	@cd "./$(ELECTRON_DIR)" && npm install
 
 electron-dev: electron-install
-	@echo "Starting OpenSwarmOnRails backend on http://localhost:$(BACKEND_PORT)"
+	@echo "Starting OpenSwarmOnRails backend on http://$(BACKEND_BIND):$(BACKEND_PORT)"
 	@echo "Starting Tailwind watcher for Rails UI"
 	@echo "Launching Electron shell against $(BACKEND_URL)"
 	@trap 'kill 0' INT TERM EXIT; \
-	(cd ./$(OPENSWARMONRAILS_DIR) && PORT=$(BACKEND_PORT) bin/rails server) & \
+	(cd ./$(OPENSWARMONRAILS_DIR) && PORT=$(BACKEND_PORT) bin/rails server -b $(BACKEND_BIND)) & \
 	(cd ./$(OPENSWARMONRAILS_DIR) && bin/rails tailwindcss:watch) & \
 	(cd "./$(ELECTRON_DIR)" && BACKEND_URL="$(BACKEND_URL)" npm run dev)
 
