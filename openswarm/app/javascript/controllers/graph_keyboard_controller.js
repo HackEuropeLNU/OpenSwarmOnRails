@@ -1278,15 +1278,15 @@ export default class extends Controller {
     requestAnimationFrame(() => element.focus())
   }
 
-  async syncWithMiro() {
-    this.traceAction("sync-with-miro")
+  async pushToMiro() {
+    this.traceAction("push-to-miro")
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
       ?.getAttribute("content")
 
     try {
-      const response = await fetch("/miro/sync", {
+      const response = await fetch("/miro/push", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1306,7 +1306,78 @@ export default class extends Controller {
         }
       } else {
         const error = await response.json()
-        window.alert(error.error || error.message || "Failed to sync with Miro")
+        window.alert(error.error || error.message || "Failed to push to Miro")
+      }
+    } catch (error) {
+      window.alert(error.message || "An unexpected error occurred")
+    }
+  }
+
+  async pullFromMiro() {
+    this.traceAction("pull-from-miro")
+
+    const csrfToken = document
+      .querySelector("meta[name='csrf-token']")
+      ?.getAttribute("content")
+
+    try {
+      // First, fetch preview of what would be created
+      const response = await fetch("/miro/pull", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          preview: true
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        window.alert(error.error || error.message || "Failed to pull from Miro")
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.new_branches.length === 0) {
+        window.alert("No new branches found in Miro board.\n\nAll branches in Miro already exist as worktrees.")
+        return
+      }
+
+      // Show preview and ask for confirmation
+      const branchList = data.new_branches.map(b => `  • ${b.branch} (parent: ${b.parent || 'root'})`).join("\n")
+      const confirmMessage = `Found ${data.new_branches.length} new branch(es) in Miro:\n\n${branchList}\n\nCreate these worktrees?`
+
+      if (!window.confirm(confirmMessage)) {
+        return
+      }
+
+      // Execute the pull with create=true
+      const createResponse = await fetch("/miro/pull", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken
+        },
+        body: JSON.stringify({
+          repo: this.repoValue,
+          preview: false,
+          branches_to_create: data.new_branches
+        })
+      })
+
+      if (createResponse.ok) {
+        const createData = await createResponse.json()
+        window.alert(`${createData.message}\n\nPage will refresh to show new worktrees.`)
+        window.location.reload()
+      } else {
+        const error = await createResponse.json()
+        window.alert(error.error || error.message || "Failed to create worktrees from Miro")
       }
     } catch (error) {
       window.alert(error.message || "An unexpected error occurred")
