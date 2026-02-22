@@ -1022,16 +1022,28 @@ export default class extends Controller {
     event.preventDefault()
     this.traceAction("submit-orchestrator")
 
+    if (!this.hasOrchestratorInputTarget || !this.orchestratorInputTarget) {
+      window.alert("Orchestrator input not found")
+      return
+    }
+
     const feature = this.orchestratorInputTarget.value.trim()
     if (!feature) {
       window.alert("Please describe the feature you want to orchestrate")
       return
     }
 
-    if (!this.orchestratorUrlValue || !this.repoValue || !this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
-      window.alert("Orchestrator is not configured or no worktree selected")
+    if (!this.orchestratorUrlValue || !this.repoValue) {
+      window.alert("Orchestrator is not configured on this page")
       return
     }
+
+    if (!this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
+      window.alert("Please select a worktree first (press g with a worktree selected)")
+      return
+    }
+
+    const parentId = this.pendingOrchestrator.parentId
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
@@ -1047,7 +1059,7 @@ export default class extends Controller {
         },
         body: JSON.stringify({
           repo: this.repoValue,
-          worktree_id: this.pendingOrchestrator.parentId,
+          worktree_id: parentId,
           feature: feature
         })
       })
@@ -1061,7 +1073,7 @@ export default class extends Controller {
       if (payload.prompt) {
         const command = `opencode --prompt ${this.shellQuotedSingleLineArg(payload.prompt)}`
         this.closeDialogs()
-        await this.openTerminal(this.pendingOrchestrator.parentId, { initialCommand: command })
+        await this.openTerminal(parentId, { initialCommand: command })
       } else {
         window.alert("No prompt returned from orchestrator")
       }
