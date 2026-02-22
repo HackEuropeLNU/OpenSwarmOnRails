@@ -31,6 +31,7 @@ const TOKEN_RATE_PATTERNS = [
   /\b(?:tokens?|tok)\s*\/\s*s\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
   /\btps\s*[:=]\s*(\d+(?:\.\d+)?)/gi
 ]
+const TOKEN_UI_STALE_MS = 8_000
 const GIT_MUTATION_COMMAND_REGEX = /\bgit\s+(?:commit|push|pull|fetch|merge|rebase|cherry-pick|revert|reset|switch|checkout|branch|stash|worktree|am|apply)\b/i
 
 export default class extends Controller {
@@ -74,6 +75,8 @@ export default class extends Controller {
     this.hydrationDeferredOutput = ""
     this.repaintRafId = null
     this.repaintTimeoutId = null
+    this.nodeTokenRateByWorktreeId = new Map()
+    this.tokenUiPruneIntervalId = window.setInterval(() => this.pruneTokenRateUi(), 1000)
 
     this.openHandler = this.openFromEvent.bind(this)
     this.resizeHandler = this.resizeTerminal.bind(this)
@@ -152,21 +155,19 @@ export default class extends Controller {
           if (!sessionId || !Number.isFinite(tokenPerSec) || tokenPerSec < 0) return
 
           const sessionMeta = this.resolveSessionMeta(sessionId)
-          window.dispatchEvent(
-            new CustomEvent("worktree:token-rate", {
-              detail: {
-                ...sessionMeta,
-                worktreeId: sessionMeta?.worktreeId || null,
-                branch: sessionMeta?.branch || null,
-                path: sessionMeta?.path || payload?.cwd || null,
-                sessionId,
-                tokensPerSecond: tokenPerSec,
-                inputChars: Number(payload?.inputChars) || 0,
-                outputChars: Number(payload?.outputChars) || 0,
-                timestamp: Number(payload?.timestamp) || Date.now()
-              }
-            })
-          )
+          const detail = {
+            ...sessionMeta,
+            worktreeId: sessionMeta?.worktreeId || null,
+            branch: sessionMeta?.branch || null,
+            path: sessionMeta?.path || payload?.cwd || null,
+            sessionId,
+            tokensPerSecond: tokenPerSec,
+            inputChars: Number(payload?.inputChars) || 0,
+            outputChars: Number(payload?.outputChars) || 0,
+            timestamp: Number(payload?.timestamp) || Date.now()
+          }
+
+          this.dispatchTokenRate(detail)
         })
         : () => {}
 
@@ -227,6 +228,10 @@ export default class extends Controller {
     this.clearBackgroundActivity()
     this.updateBackgroundIndicator()
     document.documentElement.classList.remove("overflow-hidden")
+    if (this.tokenUiPruneIntervalId) {
+      clearInterval(this.tokenUiPruneIntervalId)
+      this.tokenUiPruneIntervalId = null
+    }
   }
 
   focusTerminal() {
@@ -335,6 +340,9 @@ export default class extends Controller {
       this.destroyTerminal({ killRemote: false, closeRemoteBrowser: false })
       this.sessionId = existingSession.sessionId
       this.activePath = path
+      if (this.pendingSessionMeta) {
+        this.sessionMetaById.set(existingSession.sessionId, this.pendingSessionMeta)
+      }
       this.pathTarget.textContent = path
       this.shellTarget.textContent = existingSession.shell || ""
       this.statusTarget.textContent = "connected"
@@ -825,16 +833,93 @@ export default class extends Controller {
 
     const latestRate = matchedRates[matchedRates.length - 1]
     const sessionMeta = this.resolveSessionMeta(sessionId)
-    window.dispatchEvent(
-      new CustomEvent("worktree:token-rate", {
-        detail: {
-          ...sessionMeta,
-          sessionId,
-          tokensPerSecond: latestRate,
-          timestamp: Date.now()
-        }
-      })
-    )
+    this.dispatchTokenRate({
+      ...sessionMeta,
+      worktreeId: sessionMeta?.worktreeId || null,
+      branch: sessionMeta?.branch || null,
+      path: sessionMeta?.path || this.desktopPathBySessionId.get(sessionId) || this.activePath || null,
+      sessionId,
+      tokensPerSecond: latestRate,
+      timestamp: Date.now()
+    })
+  }
+
+  dispatchTokenRate(detail) {
+    window.dispatchEvent(new CustomEvent("worktree:token-rate", { detail }))
+    this.renderTokenRateUi(detail)
+  }
+
+  renderTokenRateUi(detail) {
+    const worktreeId = this.resolveWorktreeIdFromTokenDetail(detail)
+    const tokensPerSecond = Number(detail?.tokensPerSecond)
+    if (!worktreeId || !Number.isFinite(tokensPerSecond) || tokensPerSecond < 0) return
+
+    const badge = document.querySelector(`[data-worktree-presence-target='nodeTokenRate'][data-worktree-id='${worktreeId}']`)
+    if (!badge) {
+      console.log(TAG, "token ui badge not found", { worktreeId, detail })
+      return
+    }
+
+    this.nodeTokenRateByWorktreeId.set(worktreeId, {
+      timestamp: Number(detail?.timestamp) || Date.now()
+    })
+
+    badge.classList.remove("hidden")
+    badge.textContent = `${tokensPerSecond.toFixed(1)} tok/s`
+  }
+
+  pruneTokenRateUi() {
+    const now = Date.now()
+    for (const [worktreeId, entry] of this.nodeTokenRateByWorktreeId.entries()) {
+      if (!entry || now - entry.timestamp <= TOKEN_UI_STALE_MS) continue
+      const badge = document.querySelector(`[data-worktree-presence-target='nodeTokenRate'][data-worktree-id='${worktreeId}']`)
+      if (badge) {
+        badge.classList.add("hidden")
+        badge.textContent = ""
+      }
+      this.nodeTokenRateByWorktreeId.delete(worktreeId)
+    }
+  }
+
+  resolveWorktreeIdFromTokenDetail(detail) {
+    const direct = String(detail?.worktreeId || "").trim()
+    if (direct) return direct
+
+    const byPath = this.findWorktreeIdByPath(detail?.path)
+    if (byPath) return byPath
+
+    const byBranch = this.findWorktreeIdByBranch(detail?.branch)
+    if (byBranch) return byBranch
+
+    return null
+  }
+
+  findWorktreeIdByPath(path) {
+    const normalized = this.normalizePath(path)
+    if (!normalized) return null
+
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    for (const node of nodes) {
+      if (this.normalizePath(node?.dataset?.path) === normalized) {
+        return node?.dataset?.nodeId || null
+      }
+    }
+
+    return null
+  }
+
+  findWorktreeIdByBranch(branch) {
+    const normalized = String(branch || "").trim()
+    if (!normalized) return null
+
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    for (const node of nodes) {
+      if (String(node?.dataset?.branch || "").trim() === normalized) {
+        return node?.dataset?.nodeId || null
+      }
+    }
+
+    return null
   }
 
   resolveSessionMeta(sessionId) {
