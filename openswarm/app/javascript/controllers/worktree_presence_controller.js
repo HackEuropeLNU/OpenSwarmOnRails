@@ -22,6 +22,7 @@ export default class extends Controller {
     this.selectedBranch = this.selectedBranchValue || null
     this.selectedId = this.selectedIdValue || null
     this.members = []
+    this.publicIdentityName = this.presenceName()
 
     this.selectionHandler = this.onSelectionChanged.bind(this)
     this.shareHandler = this.onShareRequest.bind(this)
@@ -89,7 +90,7 @@ export default class extends Controller {
         room,
         client_id: this.clientId,
         identity_id: this.identityIdValue,
-        name: this.identityNameValue,
+        name: this.publicIdentityName,
         github_login: this.githubLoginValue,
         branch: this.selectedBranch,
         selected_worktree_id: this.selectedId,
@@ -118,7 +119,6 @@ export default class extends Controller {
     const detail = event?.detail || {}
     this.selectedId = detail.nodeId || this.selectedId
     this.selectedBranch = detail.branch || this.selectedBranch
-    this.currentMode = "local"
     this.upsertPresence()
     this.render()
   }
@@ -136,7 +136,7 @@ export default class extends Controller {
     if (!this.subscription) return
 
     this.subscription.perform("upsert", {
-      name: this.identityNameValue,
+      name: this.publicIdentityName,
       github_login: this.githubLoginValue,
       branch: this.selectedBranch,
       selected_worktree_id: this.selectedId,
@@ -149,7 +149,7 @@ export default class extends Controller {
     this.heartbeatId = window.setInterval(() => {
       if (!this.subscription) return
       this.subscription.perform("heartbeat", {
-        name: this.identityNameValue,
+        name: this.publicIdentityName,
         github_login: this.githubLoginValue,
         branch: this.selectedBranch,
         selected_worktree_id: this.selectedId,
@@ -174,26 +174,24 @@ export default class extends Controller {
     return generated
   }
 
-  membersByBranch() {
-    return this.members.reduce((memo, member) => {
-      const branch = member?.branch
-      if (!branch) return memo
-      if (!memo[branch]) memo[branch] = []
-      memo[branch].push(member)
-      return memo
-    }, {})
-  }
-
   render() {
     this.renderNodeBadges()
     this.renderRoster()
   }
 
   renderNodeBadges() {
-    const branchMap = this.membersByBranch()
+    const labels = this.worktreeLabelMap()
     this.nodeBadgeTargets.forEach((target) => {
-      const members = branchMap[target.dataset.branch] || []
-      target.innerHTML = members.map((member) => this.memberPill(member)).join("")
+      const worktreeId = target.dataset.worktreeId
+      const branch = target.dataset.branch
+      const members = this.members.filter((member) => {
+        if (member?.selected_worktree_id) {
+          return member.selected_worktree_id === worktreeId
+        }
+        return member?.branch && member.branch === branch
+      })
+
+      target.innerHTML = members.map((member) => this.memberPill(member, labels)).join("")
     })
   }
 
@@ -205,22 +203,25 @@ export default class extends Controller {
       return
     }
 
+    const labels = this.worktreeLabelMap()
+
     this.rosterTarget.innerHTML = this.members
       .map((member) => {
         const mine = member.identity_id === this.identityIdValue
         const mode = member.mode === "zed-shared" ? "zed live" : "local"
         const modeClass = member.mode === "zed-shared" ? "text-indigo-600" : "text-emerald-600"
-        const handle = member.github_login ? `@${member.github_login}` : "git profile"
+        const label = this.memberDisplayName(member)
+        const location = this.memberLocation(member, labels)
 
         return `
           <div class="flex items-center gap-2 rounded-md border ${mine ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"} px-2 py-1.5">
-            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-gray-300 bg-gray-50 px-1 text-[9px] text-gray-600 font-mono">${this.initials(member.name)}</span>
+            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-gray-300 bg-gray-50 px-1 text-[9px] text-gray-600 font-mono">${this.initials(label)}</span>
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-2">
-                <span class="truncate text-[11px] ${mine ? "text-blue-700" : "text-gray-700"} font-mono">${this.escapeHtml(member.name)}${mine ? " (you)" : ""}</span>
+                <span class="truncate text-[11px] ${mine ? "text-blue-700" : "text-gray-700"} font-mono">${this.escapeHtml(label)}${mine ? " (you)" : ""}</span>
                 <span class="text-[10px] font-mono ${modeClass}">${mode}</span>
               </div>
-              <div class="truncate text-[10px] text-gray-400 font-mono">${this.escapeHtml(handle)} · ${this.escapeHtml(member.branch || "no branch selected")}</div>
+              <div class="truncate text-[10px] text-gray-400 font-mono">${this.escapeHtml(location)}</div>
             </div>
           </div>
         `
@@ -228,14 +229,15 @@ export default class extends Controller {
       .join("")
   }
 
-  memberPill(member) {
+  memberPill(member, labels) {
     const mine = member.identity_id === this.identityIdValue
     const modeClass = member.mode === "zed-shared"
       ? "border-indigo-300 bg-indigo-50 text-indigo-700"
       : "border-emerald-300 bg-emerald-50 text-emerald-700"
-    const label = member.github_login ? `@${member.github_login}` : member.name
+    const label = this.memberDisplayName(member)
+    const title = this.memberLocation(member, labels)
 
-    return `<span class="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${modeClass}">${this.escapeHtml(label)}${mine ? "*" : ""}</span>`
+    return `<span title="${this.escapeHtml(title)}" class="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono ${modeClass}">${this.escapeHtml(label)}${mine ? "*" : ""}</span>`
   }
 
   inviteUrl() {
@@ -252,8 +254,56 @@ export default class extends Controller {
     if (!this.hasStatusTarget) return
 
     const label = state || "connecting"
-    const identityLabel = this.githubLoginValue ? `@${this.githubLoginValue}` : this.identityNameValue
+    const identityLabel = this.publicIdentityName
     this.statusTarget.textContent = `room: ${this.roomValue || "default"} · ${identityLabel} · ${label}`
+  }
+
+  presenceName() {
+    if (this.githubLoginValue) return `@${this.githubLoginValue}`
+    return this.anonymousName(this.identityIdValue)
+  }
+
+  anonymousName(identityId) {
+    const compact = String(identityId || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(-6)
+
+    return `dev-${compact || "anon"}`
+  }
+
+  memberDisplayName(member) {
+    if (member?.github_login) return `@${member.github_login}`
+
+    const name = String(member?.name || "").trim()
+    if (!name) return this.anonymousName(member?.identity_id)
+    if (name.startsWith("dev-")) return name
+
+    return this.anonymousName(member?.identity_id)
+  }
+
+  worktreeLabelMap() {
+    const map = new Map()
+    const nodes = document.querySelectorAll("[data-graph-keyboard-target='node']")
+    nodes.forEach((node) => {
+      const id = node?.dataset?.nodeId
+      const branch = node?.dataset?.branch
+      if (!id) return
+
+      map.set(id, branch || id)
+    })
+    return map
+  }
+
+  memberLocation(member, labels) {
+    const selectedId = String(member?.selected_worktree_id || "").trim()
+    if (selectedId) {
+      const label = labels.get(selectedId) || selectedId
+      return `on ${label}`
+    }
+
+    if (member?.branch) return `branch ${member.branch}`
+    return "no worktree selected"
   }
 
   initials(name) {

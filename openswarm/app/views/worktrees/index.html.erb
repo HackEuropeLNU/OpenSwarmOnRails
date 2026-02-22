@@ -161,11 +161,12 @@
                 <% end %>
               </div>
 
-              <div class="mt-2 flex flex-wrap items-center gap-1"
-                   data-worktree-presence-target="nodeBadge"
-                   data-branch="<%= wt.branch %>"></div>
-              </div>
-            </button>
+               <div class="mt-2 flex flex-wrap items-center gap-1"
+                    data-worktree-presence-target="nodeBadge"
+                    data-branch="<%= wt.branch %>"
+                    data-worktree-id="<%= wt.id %>"></div>
+               </div>
+             </button>
 
             <button type="button"
                     class="node-create-btn absolute left-1/2 top-full w-8 h-8 rounded-full
