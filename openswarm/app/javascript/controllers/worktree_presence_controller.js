@@ -5,7 +5,7 @@ const HEARTBEAT_MS = 10_000
 const TOKEN_RATE_STALE_MS = 8_000
 
 export default class extends Controller {
-  static targets = ["roster", "nodeBadge", "nodeTokenRate", "status", "inviteInput", "nameInput"]
+  static targets = ["roster", "tokenLeaderboard", "nodeBadge", "nodeTokenRate", "status", "inviteInput", "nameInput"]
 
   static values = {
     repo: String,
@@ -211,6 +211,7 @@ export default class extends Controller {
     this.renderNodeBadges()
     this.renderNodeTokenRates()
     this.renderRoster()
+    this.renderTokenLeaderboard()
   }
 
   renderNodeBadges() {
@@ -236,14 +237,15 @@ export default class extends Controller {
       const worktreeId = target.dataset.worktreeId
       const tokenRate = this.tokenRateByWorktreeId.get(worktreeId)
       const isFresh = tokenRate && now - tokenRate.timestamp <= TOKEN_RATE_STALE_MS
-      if (!isFresh) {
+      const tokensPerSecond = Number(tokenRate?.tokensPerSecond)
+      if (!isFresh || !Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) {
         target.classList.add("hidden")
         target.textContent = ""
         return
       }
 
       target.classList.remove("hidden")
-      target.textContent = `${tokenRate.tokensPerSecond.toFixed(1)} tok/s`
+      target.textContent = `${tokensPerSecond.toFixed(1)} tok/s`
     })
   }
 
@@ -347,6 +349,51 @@ export default class extends Controller {
         `
       })
       .join("")
+  }
+
+  renderTokenLeaderboard() {
+    if (!this.hasTokenLeaderboardTarget) return
+
+    const labels = this.worktreeLabelMap()
+    const now = Date.now()
+    const activeWorktrees = []
+
+    for (const [worktreeId, tokenRate] of this.tokenRateByWorktreeId.entries()) {
+      const isFresh = tokenRate && now - tokenRate.timestamp <= TOKEN_RATE_STALE_MS
+      const tokensPerSecond = Number(tokenRate?.tokensPerSecond)
+      if (!isFresh || !Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) continue
+
+      activeWorktrees.push({
+        worktreeId,
+        label: labels.get(worktreeId) || worktreeId,
+        tokensPerSecond
+      })
+    }
+
+    if (activeWorktrees.length === 0) {
+      this.tokenLeaderboardTarget.innerHTML = ""
+      this.tokenLeaderboardTarget.classList.add("hidden")
+      return
+    }
+
+    activeWorktrees.sort((a, b) => b.tokensPerSecond - a.tokensPerSecond)
+
+    const entries = activeWorktrees
+      .map((entry, index) => {
+        return `
+          <div class="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50/70 px-2 py-1 dark:border-slate-700 dark:bg-slate-900/70">
+            <span class="min-w-0 truncate text-[10px] font-mono text-gray-600 dark:text-slate-300">${index + 1}. ${this.escapeHtml(entry.label)}</span>
+            ${this.tokenRatePill(entry.tokensPerSecond)}
+          </div>
+        `
+      })
+      .join("")
+
+    this.tokenLeaderboardTarget.classList.remove("hidden")
+    this.tokenLeaderboardTarget.innerHTML = `
+      <div class="mb-1 text-[9px] uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500 font-mono">live token leaderboard</div>
+      <div class="space-y-1">${entries}</div>
+    `
   }
 
   memberPill(member, labels) {
