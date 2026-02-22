@@ -521,8 +521,8 @@ export default class extends Controller {
       theme: {
         background: "#000000",
         foreground: "#dbe5f5",
-        cursor: "#93c5fd",
-        selectionBackground: "rgba(59, 130, 246, 0.28)",
+        cursor: "#f87171",
+        selectionBackground: "rgba(185, 28, 28, 0.32)",
         black: "#0f172a",
         red: "#ef4444",
         green: "#22c55e",

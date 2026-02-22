@@ -323,17 +323,17 @@ export default class extends Controller {
       const isSelected = node.dataset.nodeId === this.selectedValue
       inner.classList.toggle("node-glow-selected", isSelected)
       inner.classList.toggle("ring-1", isSelected)
-      inner.classList.toggle("ring-blue-300/40", isSelected)
-      inner.classList.toggle("border-blue-300", isSelected)
-      inner.classList.toggle("bg-blue-50/70", isSelected)
+      inner.classList.toggle("ring-red-300/40", isSelected)
+      inner.classList.toggle("border-red-300", isSelected)
+      inner.classList.toggle("bg-red-50/70", isSelected)
     })
 
     this.listItemTargets.forEach((item) => {
       const isSelected = item.dataset.nodeId === this.selectedValue
       const label = item.querySelector("[data-node-branch-label]")
 
-      item.classList.toggle("bg-blue-50", isSelected)
-      item.classList.toggle("border-blue-200", isSelected)
+      item.classList.toggle("bg-red-50", isSelected)
+      item.classList.toggle("border-red-200", isSelected)
       item.classList.toggle("hover:bg-gray-100", !isSelected)
       if (label) {
         label.classList.toggle("text-gray-800", isSelected)

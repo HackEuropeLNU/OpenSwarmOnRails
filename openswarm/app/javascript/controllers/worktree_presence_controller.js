@@ -237,19 +237,19 @@ export default class extends Controller {
       .map((member) => {
         const mine = member.identity_id === this.identityIdValue
         const mode = member.mode === "zed-shared" ? "zed live" : "local"
-        const modeClass = member.mode === "zed-shared" ? "text-indigo-600" : "text-emerald-600"
+        const modeClass = member.mode === "zed-shared" ? "text-red-700 dark:text-red-300" : "text-emerald-600"
         const label = this.memberDisplayName(member)
         const location = this.memberLocation(member, labels)
 
         return `
-          <div class="flex items-center gap-2 rounded-md border ${mine ? "border-blue-200 bg-blue-50/50" : "border-gray-200 bg-white"} px-2 py-1.5">
-            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-gray-300 bg-gray-50 px-1 text-[9px] text-gray-600 font-mono">${this.initials(label)}</span>
+          <div class="flex items-center gap-2 rounded-md border ${mine ? "border-red-200 bg-red-50/50 dark:border-red-900/80 dark:bg-red-950/30" : "border-gray-200 bg-white dark:border-slate-700 dark:bg-slate-900"} px-2 py-1.5">
+            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-1 text-[9px] text-gray-600 dark:text-slate-300 font-mono">${this.initials(label)}</span>
             <div class="min-w-0 flex-1">
               <div class="flex items-center justify-between gap-2">
-                <span class="truncate text-[11px] ${mine ? "text-blue-700" : "text-gray-700"} font-mono">${this.escapeHtml(label)}${mine ? " (you)" : ""}</span>
+                <span class="truncate text-[11px] ${mine ? "text-red-700 dark:text-red-300" : "text-gray-700 dark:text-slate-200"} font-mono">${this.escapeHtml(label)}${mine ? " (you)" : ""}</span>
                 <span class="text-[10px] font-mono ${modeClass}">${mode}</span>
               </div>
-              <div class="truncate text-[10px] text-gray-400 font-mono">${this.escapeHtml(location)}</div>
+              <div class="truncate text-[10px] text-gray-400 dark:text-slate-500 font-mono">${this.escapeHtml(location)}</div>
             </div>
           </div>
         `
@@ -260,7 +260,7 @@ export default class extends Controller {
   memberPill(member, labels) {
     const mine = member.identity_id === this.identityIdValue
     const modeClass = member.mode === "zed-shared"
-      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+      ? "border-red-300 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/80"
       : "border-emerald-300 bg-emerald-50 text-emerald-700"
     const label = this.memberDisplayName(member)
     const title = this.memberLocation(member, labels)

@@ -6,7 +6,7 @@ module WorktreesHelper
     classes = []
 
     if wt.id == selected_id
-      classes << "ring-2 ring-blue-300 border-blue-400"
+      classes << "ring-2 ring-red-300 border-red-400"
     elsif wt.dirty
       classes << "border-red-300"
     elsif wt.behind > 0

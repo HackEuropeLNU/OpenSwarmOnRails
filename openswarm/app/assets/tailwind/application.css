@@ -1,5 +1,33 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f8fafc;
+  --color-surface-muted: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-grid-dot: rgba(15, 23, 42, 0.14);
+  --color-accent: #b91c1c;
+  --color-accent-soft: #fee2e2;
+  --color-accent-border: #fca5a5;
+}
+
+.dark {
+  --color-bg: #0f1116;
+  --color-surface: #171b23;
+  --color-surface-muted: #10141b;
+  --color-border: #2a3341;
+  --color-text: #e5e7eb;
+  --color-text-muted: #9ca3af;
+  --color-grid-dot: rgba(248, 250, 252, 0.1);
+  --color-accent: #f87171;
+  --color-accent-soft: rgba(127, 29, 29, 0.28);
+  --color-accent-border: rgba(248, 113, 113, 0.5);
+}
+
 @theme {
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-display: "Inter", system-ui, sans-serif;
@@ -13,14 +41,14 @@
   --color-border-default: rgba(0, 0, 0, 0.12);
   --color-border-strong: rgba(0, 0, 0, 0.2);
 
-  --color-accent-blue: #2563eb;
-  --color-accent-glow: rgba(37, 99, 235, 0.08);
+  --color-accent-crimson: #b91c1c;
+  --color-accent-glow: rgba(185, 28, 28, 0.12);
 }
 
 /* ═══ Base ═══ */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+  scrollbar-color: rgba(120, 120, 130, 0.35) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -33,12 +61,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(120, 120, 130, 0.35);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(156, 163, 175, 0.55);
 }
 
 /* ═══ Node shadows ═══ */
@@ -48,8 +76,8 @@
 }
 
 .node-glow-selected {
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2),
-              0 2px 8px rgba(37, 99, 235, 0.1),
+  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.24),
+              0 2px 8px rgba(185, 28, 28, 0.14),
               0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
@@ -100,7 +128,7 @@
 
 /* ═══ Dotted grid background ═══ */
 .bg-grid {
-  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--color-grid-dot) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
@@ -111,13 +139,18 @@ kbd {
 
 /* ═══ Focus styles ═══ */
 :focus-visible {
-  outline: 1px solid rgba(37, 99, 235, 0.5);
+  outline: 1px solid var(--color-accent-border);
   outline-offset: 2px;
 }
 
 button:focus-visible {
-  outline: 1px solid rgba(37, 99, 235, 0.5);
+  outline: 1px solid var(--color-accent-border);
   outline-offset: 2px;
+}
+
+.app-shell {
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 /* ═══ Terminal Panel - slide off-screen (never display:none, always rendered) ═══ */
