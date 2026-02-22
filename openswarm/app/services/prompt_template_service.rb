@@ -38,17 +38,21 @@ class PromptTemplateService
          - API contracts vs implementation
          - Database/migrations vs application code
          - Configuration vs feature code
-      5) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations").
+      5) Use hierarchical branch names so parent/child relationships are unambiguous:
+         - First-level child must be an umbrella branch like: "feature/<topic>"
+         - Remaining children must be nested under it like: "feature/<topic>/api", "feature/<topic>/frontend", "feature/<topic>/migrations"
+         - Do NOT create flat sibling names like "auth-api" directly from main.
       6) Determine the current parent branch from the main parent worktree.
       7) Create the first-level child from the main parent branch using:
          git -C "{parent_path}" worktree add -b "<first-child-branch>" "$(dirname "{parent_path}")/<first-child-branch-with-slashes-replaced-by-dashes>" "<main-parent-branch>"
       8) For every remaining child worktree, branch from the first-level child branch (not from main) using:
          git -C "{parent_path}" worktree add -b "<child-branch>" "$(dirname "{parent_path}")/<child-branch-with-slashes-replaced-by-dashes>" "<first-child-branch>"
-      9) You must execute the commands. Do not stop after planning.
-      10) After creating all worktrees, run:
+      9) Never use <main-parent-branch> as the start point for any child beyond the first-level child.
+      10) You must execute the commands. Do not stop after planning.
+      11) After creating all worktrees, run:
           git -C "{parent_path}" worktree list
-      11) Report what you created as a concise human-readable list including hierarchy (main -> first child -> other children with branch and path).
-      12) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
+      12) Report what you created as a concise human-readable list including hierarchy (main -> first child -> other children with branch and path).
+      13) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
     PROMPT
   }.freeze
 

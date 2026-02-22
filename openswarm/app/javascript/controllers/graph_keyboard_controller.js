@@ -697,19 +697,25 @@ export default class extends Controller {
       return
     }
 
-    const command = `opencode --prompt ${this.shellQuotedSingleLineArg(conflict.prompt)}`
+    const command = this.buildOpencodePromptCommand(conflict.prompt)
     this.closeDialogs()
     await this.openTerminal(conflict.parentId, { initialCommand: command })
   }
 
-  shellQuotedSingleLineArg(text) {
+  buildOpencodePromptCommand(text) {
     const normalized = String(text)
       .replace(/\r\n/g, "\n")
       .replace(/\r/g, "\n")
-      .replace(/\s*\n\s*/g, " ")
       .trim()
 
-    return `'${normalized.replace(/'/g, `'"'"'`)}'`
+    let delimiter = "OPENSWARM_PROMPT"
+    let suffix = 1
+    while (normalized.includes(delimiter)) {
+      delimiter = `OPENSWARM_PROMPT_${suffix}`
+      suffix += 1
+    }
+
+    return `opencode --prompt "$(cat <<'${delimiter}'\n${normalized}\n${delimiter}\n)"`
   }
 
   createFromNode(event) {
@@ -1070,7 +1076,7 @@ export default class extends Controller {
       }
 
       if (payload.prompt) {
-        const command = `opencode --prompt ${this.shellQuotedSingleLineArg(payload.prompt)}`
+        const command = this.buildOpencodePromptCommand(payload.prompt)
         this.closeDialogs()
         await this.openTerminal(parentId, { initialCommand: command })
       } else {
