@@ -280,13 +280,22 @@ class WorktreesController < ApplicationController
 
   def orchestrator
     repo_name = params[:repo].to_s
-    worktree_id = params[:worktree_id].to_s
     feature_description = params[:feature].to_s.strip
 
     return render json: { error: "Feature description is required" }, status: :unprocessable_entity if feature_description.empty?
 
-    selected_repo, worktree, = resolve_repo_and_worktree(repo_name, worktree_id)
-    return unless selected_repo && worktree
+    repos = discover_repos
+    selected_repo = repos.find { |r| r[:name] == repo_name }
+    return render json: { error: "Repository not found" }, status: :not_found unless selected_repo
+
+    discovery = GitWorktreeService.discover(selected_repo[:root])
+    return render json: { error: discovery.error }, status: :unprocessable_entity unless discovery.success
+
+    worktrees = Array(discovery.data[:worktrees])
+    worktree = worktrees.find { |wt| wt.parent_branch.nil? && !wt.detached }
+    worktree ||= worktrees.find { |wt| wt.parent_branch.nil? }
+    worktree ||= worktrees.first
+    return render json: { error: "No worktrees found for repository" }, status: :unprocessable_entity unless worktree
 
     prompt = PromptTemplateService.orchestrator_prompt(
       parent_path: worktree.path,

@@ -703,12 +703,13 @@ export default class extends Controller {
   }
 
   shellQuotedSingleLineArg(text) {
-    return `$'${String(text)
-      .replace(/\\/g, "\\\\")
-      .replace(/'/g, "\\'")
-      .replace(/\r/g, "\\r")
-      .replace(/\n/g, "\\n")
-      .replace(/\t/g, "\\t")}'`
+    const normalized = String(text)
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .replace(/\s*\n\s*/g, " ")
+      .trim()
+
+    return `'${normalized.replace(/'/g, `'"'"'`)}'`
   }
 
   createFromNode(event) {
@@ -996,16 +997,16 @@ export default class extends Controller {
 
   openOrchestrator() {
     this.traceAction("open-orchestrator")
-    const selectedNode = this.selectedNodeTarget()
+    const rootNode = this.rootNodeTarget()
 
-    if (!selectedNode) {
-      window.alert("Please select a worktree first")
+    if (!rootNode) {
+      window.alert("No worktree available for orchestration")
       return
     }
 
     this.pendingOrchestrator = {
-      parentId: selectedNode.dataset.nodeId,
-      parentBranch: selectedNode.dataset.branch
+      parentId: rootNode.dataset.nodeId,
+      parentBranch: rootNode.dataset.branch
     }
 
     this.orchestratorInputTarget.value = ""
@@ -1038,12 +1039,11 @@ export default class extends Controller {
       return
     }
 
-    if (!this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
-      window.alert("Please select a worktree first (press g with a worktree selected)")
+    const parentId = this.pendingOrchestrator?.parentId || this.rootNodeTarget()?.dataset.nodeId
+    if (!parentId) {
+      window.alert("Unable to resolve repository root worktree")
       return
     }
-
-    const parentId = this.pendingOrchestrator.parentId
 
     const csrfToken = document
       .querySelector("meta[name='csrf-token']")
@@ -1059,7 +1059,6 @@ export default class extends Controller {
         },
         body: JSON.stringify({
           repo: this.repoValue,
-          worktree_id: parentId,
           feature: feature
         })
       })
@@ -1126,6 +1125,19 @@ export default class extends Controller {
     const message = payload.error || payload.raw || `Failed to create worktree (${response.status})`
     const conflict = /already exists/i.test(message)
     return { ok: false, payload, message, conflict }
+  }
+
+  rootNodeTarget() {
+    const nodes = this.nodeTargets || []
+    if (nodes.length === 0) return null
+
+    const explicitRoot = nodes.find((node) => !String(node.dataset.parentBranch || "").trim())
+    if (explicitRoot) return explicitRoot
+
+    const mainBranch = nodes.find((node) => String(node.dataset.branch || "").trim() === "main")
+    if (mainBranch) return mainBranch
+
+    return nodes[0]
   }
 
   traceAction(action) {
