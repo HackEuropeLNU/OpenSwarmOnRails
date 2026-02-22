@@ -1018,14 +1018,24 @@ export default class extends Controller {
     event.preventDefault()
     this.traceAction("submit-orchestrator")
 
+    if (!this.hasOrchestratorInputTarget || !this.orchestratorInputTarget) {
+      window.alert("Orchestrator input not found")
+      return
+    }
+
     const feature = this.orchestratorInputTarget.value.trim()
     if (!feature) {
       window.alert("Please describe the feature you want to orchestrate")
       return
     }
 
-    if (!this.orchestratorUrlValue || !this.repoValue || !this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
-      window.alert("Orchestrator is not configured or no worktree selected")
+    if (!this.orchestratorUrlValue || !this.repoValue) {
+      window.alert("Orchestrator is not configured on this page")
+      return
+    }
+
+    if (!this.pendingOrchestrator || !this.pendingOrchestrator.parentId) {
+      window.alert("Please select a worktree first (press g with a worktree selected)")
       return
     }
 
