@@ -145,6 +145,28 @@ export default class extends Controller {
         }
       })
 
+      const offMetrics = typeof desktopTerminal.onMetrics === "function"
+        ? desktopTerminal.onMetrics((payload) => {
+          const sessionId = payload?.sessionId
+          const tokenPerSec = Number(payload?.tokenPerSec)
+          if (!sessionId || !Number.isFinite(tokenPerSec) || tokenPerSec < 0) return
+
+          const sessionMeta = this.resolveSessionMeta(sessionId)
+          window.dispatchEvent(
+            new CustomEvent("worktree:token-rate", {
+              detail: {
+                ...sessionMeta,
+                sessionId,
+                tokensPerSecond: tokenPerSec,
+                inputChars: Number(payload?.inputChars) || 0,
+                outputChars: Number(payload?.outputChars) || 0,
+                timestamp: Number(payload?.timestamp) || Date.now()
+              }
+            })
+          )
+        })
+        : () => {}
+
       const offExit = desktopTerminal.onExit((sessionId, _exitCode) => {
         const mappedPath = this.desktopPathBySessionId.get(sessionId)
         if (mappedPath) {
@@ -171,7 +193,7 @@ export default class extends Controller {
         this.updateBackgroundIndicator()
       })
 
-      this.ipcCleanups.push(offData, offExit)
+      this.ipcCleanups.push(offData, offMetrics, offExit)
     }
   }
 

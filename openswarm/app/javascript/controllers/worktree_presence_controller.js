@@ -2,6 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import consumer from "cable_consumer"
 
 const HEARTBEAT_MS = 10_000
+const TOKEN_RATE_STALE_MS = 8_000
 
 export default class extends Controller {
   static targets = ["roster", "nodeBadge", "status", "inviteInput", "nameInput"]
@@ -23,11 +24,14 @@ export default class extends Controller {
     this.selectedId = this.selectedIdValue || null
     this.members = []
     this.publicIdentityName = this.loadCustomName() || this.presenceName()
+    this.tokenRateByWorktreeId = new Map()
 
     this.selectionHandler = this.onSelectionChanged.bind(this)
     this.shareHandler = this.onShareRequest.bind(this)
+    this.tokenRateHandler = this.onTokenRate.bind(this)
     window.addEventListener("worktree:selected", this.selectionHandler)
     window.addEventListener("zed:share-request", this.shareHandler)
+    window.addEventListener("worktree:token-rate", this.tokenRateHandler)
 
     if (this.hasInviteInputTarget) {
       this.inviteInputTarget.value = this.inviteUrl()
@@ -44,6 +48,7 @@ export default class extends Controller {
   disconnect() {
     window.removeEventListener("worktree:selected", this.selectionHandler)
     window.removeEventListener("zed:share-request", this.shareHandler)
+    window.removeEventListener("worktree:token-rate", this.tokenRateHandler)
 
     if (this.subscription) {
       this.subscription.perform("leave", {})
@@ -209,6 +214,7 @@ export default class extends Controller {
 
   renderNodeBadges() {
     const labels = this.worktreeLabelMap()
+    const now = Date.now()
     this.nodeBadgeTargets.forEach((target) => {
       const worktreeId = target.dataset.worktreeId
       const branch = target.dataset.branch
@@ -219,8 +225,68 @@ export default class extends Controller {
         return member?.branch && member.branch === branch
       })
 
-      target.innerHTML = members.map((member) => this.memberPill(member, labels)).join("")
+      const pills = members.map((member) => this.memberPill(member, labels))
+      const tokenRate = this.tokenRateByWorktreeId.get(worktreeId)
+      if (tokenRate && now - tokenRate.timestamp <= TOKEN_RATE_STALE_MS) {
+        pills.push(this.tokenRatePill(tokenRate.tokensPerSecond))
+      }
+
+      target.innerHTML = pills.join("")
     })
+  }
+
+  onTokenRate(event) {
+    const detail = event?.detail || {}
+    const tokensPerSecond = Number(detail.tokensPerSecond)
+    if (!Number.isFinite(tokensPerSecond) || tokensPerSecond < 0) return
+
+    const worktreeId = this.resolveWorktreeIdFromTokenDetail(detail)
+    if (!worktreeId) return
+
+    this.tokenRateByWorktreeId.set(worktreeId, {
+      tokensPerSecond,
+      timestamp: Number(detail.timestamp) || Date.now()
+    })
+
+    this.renderNodeBadges()
+  }
+
+  resolveWorktreeIdFromTokenDetail(detail) {
+    const direct = String(detail.worktreeId || "").trim()
+    if (direct) return direct
+
+    const byPath = this.findWorktreeIdByPath(detail.path)
+    if (byPath) return byPath
+
+    const byBranch = this.findWorktreeIdByBranch(detail.branch)
+    if (byBranch) return byBranch
+
+    return null
+  }
+
+  findWorktreeIdByPath(path) {
+    const normalized = this.normalizePath(path)
+    if (!normalized) return null
+
+    const node = document.querySelector(`[data-graph-keyboard-target='node'][data-path='${CSS.escape(normalized)}']`)
+    return node?.dataset?.nodeId || null
+  }
+
+  findWorktreeIdByBranch(branch) {
+    const normalized = String(branch || "").trim()
+    if (!normalized) return null
+
+    const node = document.querySelector(`[data-graph-keyboard-target='node'][data-branch='${CSS.escape(normalized)}']`)
+    return node?.dataset?.nodeId || null
+  }
+
+  normalizePath(path) {
+    if (!path) return ""
+    return String(path).trim().replace(/\/+$/, "") || "/"
+  }
+
+  tokenRatePill(tokensPerSecond) {
+    return `<span class="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[9px] font-mono text-sky-700">${tokensPerSecond.toFixed(1)} tok/s</span>`
   }
 
   renderRoster() {
