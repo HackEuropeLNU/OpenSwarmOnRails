@@ -324,8 +324,11 @@ export default class extends Controller {
       inner.classList.toggle("node-glow-selected", isSelected)
       inner.classList.toggle("ring-1", isSelected)
       inner.classList.toggle("ring-red-300/40", isSelected)
+      inner.classList.toggle("dark:ring-red-700/40", isSelected)
       inner.classList.toggle("border-red-300", isSelected)
+      inner.classList.toggle("dark:border-red-800/60", isSelected)
       inner.classList.toggle("bg-red-50/70", isSelected)
+      inner.classList.toggle("dark:bg-red-950/30", isSelected)
     })
 
     this.listItemTargets.forEach((item) => {
