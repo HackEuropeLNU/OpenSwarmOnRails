@@ -150,7 +150,7 @@ export default class extends Controller {
         break
       case "d":
         event.preventDefault()
-        this.deleteSelected()
+        this.deleteSelectedShortcut()
         break
       case "f":
         if (!event.ctrlKey && !event.metaKey) {
@@ -857,6 +857,33 @@ export default class extends Controller {
     this.openDeleteDialog(selectedNode)
   }
 
+  deleteSelectedShortcut() {
+    this.traceAction("delete-selected-shortcut")
+    const selectedNode = this.selectedNodeTarget()
+
+    if (!selectedNode) return
+    if (this.requiresDeleteConfirmation(selectedNode)) {
+      this.openDeleteDialog(selectedNode)
+      return
+    }
+
+    this.pendingDeleteWorktreeId = selectedNode.dataset.nodeId
+    this.pendingDeleteForce = false
+    this.submitDelete()
+  }
+
+  requiresDeleteConfirmation(node) {
+    return this.nodeIsDirty(node) || this.nodeHasUnmergedCommits(node)
+  }
+
+  nodeIsDirty(node) {
+    return node.dataset.dirty === "true"
+  }
+
+  nodeHasUnmergedCommits(node) {
+    return Number.parseInt(node.dataset.ahead || "0", 10) > 0
+  }
+
   selectedNodeTarget() {
     return this.nodeTargets.find(
       (node) => node.dataset.nodeId === this.selectedValue
@@ -912,10 +939,11 @@ export default class extends Controller {
     if (!worktreeId) return
 
     const branch = node.dataset.branch || "this worktree"
-    const dirty = node.dataset.dirty === "true"
+    const dirty = this.nodeIsDirty(node)
+    const hasUnmergedCommits = this.nodeHasUnmergedCommits(node)
 
     this.pendingDeleteWorktreeId = worktreeId
-    this.pendingDeleteForce = dirty
+    this.pendingDeleteForce = dirty || hasUnmergedCommits
     this.deleteBranchTarget.textContent = branch
     this.deleteDirtyTarget.textContent = dirty ? "yes" : "no"
     this.deleteModalTarget.classList.remove("hidden")
@@ -928,7 +956,7 @@ export default class extends Controller {
   }
 
   async submitDelete(event) {
-    event.preventDefault()
+    event?.preventDefault?.()
     this.traceAction("submit-delete")
 
     const worktreeId = this.pendingDeleteWorktreeId
