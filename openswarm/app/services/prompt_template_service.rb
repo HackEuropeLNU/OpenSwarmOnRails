@@ -41,7 +41,8 @@ class PromptTemplateService
       4) Keep branch names short, lowercase, and use hyphens (e.g., "auth-api", "auth-frontend", "auth-migrations")
       5) Return a JSON array of worktree objects. Example:
         [{"name": "feature/add-auth", "description": "Main feature branch - coordinates sub-worktrees"}, {"name": "feature/add-auth-api", "description": "Backend API endpoints and authentication logic"}, {"name": "feature/add-auth-frontend", "description": "Frontend login/signup forms and UI components"}, {"name": "feature/add-auth-migrations", "description": "Database schema and migrations for users table"}]
-      6) Do NOT create worktrees yourself - just output the JSON array describing what worktrees should be created.
+      6) After planning, actually create each worktree from the parent worktree using git worktree commands.
+      7) Do NOT implement code, modify files, or run project changes inside any created worktree; only create the worktrees.
     PROMPT
   }.freeze
 
