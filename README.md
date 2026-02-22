@@ -1,6 +1,6 @@
 # OpenSwarm on Rails
 
-OpenSwarm is a Rails app for visual Git worktree management. It helps you see branch relationships as a graph and run common branch workflows from one place.
+OpenSwarm is a Rails app for visual Git worktree management. It shows branch relationships as a graph and streamlines common branch workflows.
 
 ## What it does
 
