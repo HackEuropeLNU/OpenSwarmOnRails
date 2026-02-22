@@ -119,7 +119,7 @@ export default class extends Controller {
         client_id: this.clientId,
         identity_id: this.identityIdValue,
         name: this.publicIdentityName,
-        github_login: this.githubLoginValue,
+        github_login: null,
         branch: this.selectedBranch,
         selected_worktree_id: this.selectedId,
         mode: this.currentMode
@@ -165,7 +165,7 @@ export default class extends Controller {
 
     this.subscription.perform("upsert", {
       name: this.publicIdentityName,
-      github_login: this.githubLoginValue,
+      github_login: null,
       branch: this.selectedBranch,
       selected_worktree_id: this.selectedId,
       mode: this.currentMode
@@ -178,7 +178,7 @@ export default class extends Controller {
       if (!this.subscription) return
       this.subscription.perform("heartbeat", {
         name: this.publicIdentityName,
-        github_login: this.githubLoginValue,
+        github_login: null,
         branch: this.selectedBranch,
         selected_worktree_id: this.selectedId,
         mode: this.currentMode
@@ -287,14 +287,11 @@ export default class extends Controller {
   }
 
   presenceName() {
-    const identityName = this.normalizeName(this.identityNameValue)
-    if (identityName) return identityName
-    if (this.githubLoginValue) return `@${this.githubLoginValue}`
-    return this.anonymousName(this.identityIdValue)
+    return this.anonymousName(this.clientId)
   }
 
-  anonymousName(identityId) {
-    const compact = String(identityId || "")
+  anonymousName(source) {
+    const compact = String(source || "")
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
       .slice(-6)
@@ -305,8 +302,7 @@ export default class extends Controller {
   memberDisplayName(member) {
     const name = this.normalizeName(member?.name)
     if (name) return name
-    if (member?.github_login) return `@${member.github_login}`
-    return this.anonymousName(member?.identity_id)
+    return this.anonymousName(member?.id || member?.identity_id)
   }
 
   customNameStorageKey() {
