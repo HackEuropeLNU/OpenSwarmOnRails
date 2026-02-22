@@ -3,6 +3,11 @@ import consumer from "cable_consumer"
 
 const HEARTBEAT_MS = 10_000
 const TOKEN_RATE_STALE_MS = 8_000
+const TOKEN_RATE_METRIC_STORAGE_KEY = "openswarm.tokenRateMetric"
+const TOKEN_RATE_METRIC_TOKENS = "tokens"
+const TOKEN_RATE_METRIC_DOLLARS = "dollars"
+const USD_PER_MTOK = 5
+const TOKENS_PER_MTOK = 1_000_000
 
 export default class extends Controller {
   static targets = ["roster", "tokenLeaderboard", "nodeBadge", "nodeTokenRate", "status", "inviteInput", "nameInput"]
@@ -25,13 +30,16 @@ export default class extends Controller {
     this.members = []
     this.publicIdentityName = this.loadCustomName() || this.presenceName()
     this.tokenRateByWorktreeId = new Map()
+    this.tokenRateMetric = this.loadTokenRateMetric()
 
     this.selectionHandler = this.onSelectionChanged.bind(this)
     this.shareHandler = this.onShareRequest.bind(this)
     this.tokenRateHandler = this.onTokenRate.bind(this)
+    this.metricToggleHandler = this.onMetricToggle.bind(this)
     window.addEventListener("worktree:selected", this.selectionHandler)
     window.addEventListener("zed:share-request", this.shareHandler)
     window.addEventListener("worktree:token-rate", this.tokenRateHandler)
+    window.addEventListener("worktree:token-metric-toggle", this.metricToggleHandler)
 
     if (this.hasInviteInputTarget) {
       this.inviteInputTarget.value = this.inviteUrl()
@@ -49,6 +57,7 @@ export default class extends Controller {
     window.removeEventListener("worktree:selected", this.selectionHandler)
     window.removeEventListener("zed:share-request", this.shareHandler)
     window.removeEventListener("worktree:token-rate", this.tokenRateHandler)
+    window.removeEventListener("worktree:token-metric-toggle", this.metricToggleHandler)
 
     if (this.subscription) {
       this.subscription.perform("leave", {})
@@ -245,8 +254,23 @@ export default class extends Controller {
       }
 
       target.classList.remove("hidden")
-      target.textContent = `${tokensPerSecond.toFixed(1)} tok/s`
+      target.textContent = this.formatTokenRate(tokensPerSecond)
     })
+  }
+
+  onMetricToggle(event) {
+    const requestedMode = String(event?.detail?.mode || "").trim().toLowerCase()
+    if (requestedMode === TOKEN_RATE_METRIC_DOLLARS || requestedMode === TOKEN_RATE_METRIC_TOKENS) {
+      this.tokenRateMetric = requestedMode
+    } else {
+      this.tokenRateMetric = this.tokenRateMetric === TOKEN_RATE_METRIC_DOLLARS
+        ? TOKEN_RATE_METRIC_TOKENS
+        : TOKEN_RATE_METRIC_DOLLARS
+    }
+
+    this.storeTokenRateMetric(this.tokenRateMetric)
+    this.renderNodeTokenRates()
+    this.renderTokenLeaderboard()
   }
 
   onTokenRate(event) {
@@ -314,7 +338,7 @@ export default class extends Controller {
   }
 
   tokenRatePill(tokensPerSecond) {
-    return `<span class="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[9px] font-mono text-sky-700">${tokensPerSecond.toFixed(1)} tok/s</span>`
+    return `<span class="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[9px] font-mono text-sky-700">${this.formatTokenRate(tokensPerSecond)}</span>`
   }
 
   renderRoster() {
@@ -391,9 +415,47 @@ export default class extends Controller {
 
     this.tokenLeaderboardTarget.classList.remove("hidden")
     this.tokenLeaderboardTarget.innerHTML = `
-      <div class="mb-1 text-[9px] uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500 font-mono">live token leaderboard</div>
+      <div class="mb-1 text-[9px] uppercase tracking-[0.14em] text-gray-400 dark:text-slate-500 font-mono">live token leaderboard (${this.tokenMetricLabel()})</div>
       <div class="space-y-1">${entries}</div>
     `
+  }
+
+  formatTokenRate(tokensPerSecond) {
+    if (this.tokenRateMetric === TOKEN_RATE_METRIC_DOLLARS) {
+      const dollarsPerSecond = (tokensPerSecond * USD_PER_MTOK) / TOKENS_PER_MTOK
+      return `$${dollarsPerSecond.toFixed(4)}/s`
+    }
+
+    return `${tokensPerSecond.toFixed(1)} tok/s`
+  }
+
+  tokenMetricLabel() {
+    if (this.tokenRateMetric === TOKEN_RATE_METRIC_DOLLARS) {
+      return "$/s @ $5/MTok"
+    }
+
+    return "tok/s"
+  }
+
+  loadTokenRateMetric() {
+    try {
+      const stored = String(window.localStorage.getItem(TOKEN_RATE_METRIC_STORAGE_KEY) || "").trim().toLowerCase()
+      if (stored === TOKEN_RATE_METRIC_DOLLARS || stored === TOKEN_RATE_METRIC_TOKENS) {
+        return stored
+      }
+    } catch (_error) {
+      // ignored
+    }
+
+    return TOKEN_RATE_METRIC_TOKENS
+  }
+
+  storeTokenRateMetric(mode) {
+    try {
+      window.localStorage.setItem(TOKEN_RATE_METRIC_STORAGE_KEY, mode)
+    } catch (_error) {
+      // ignored
+    }
   }
 
   memberPill(member, labels) {

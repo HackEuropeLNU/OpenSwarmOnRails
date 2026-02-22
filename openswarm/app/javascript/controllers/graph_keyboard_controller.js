@@ -176,6 +176,10 @@ export default class extends Controller {
         event.preventDefault()
         this.mergeSelectedToParent()
         break
+      case "M":
+        event.preventDefault()
+        window.dispatchEvent(new CustomEvent("worktree:token-metric-toggle"))
+        break
       case "z":
         event.preventDefault()
         this.shareSelectedInZed()
