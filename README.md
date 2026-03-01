@@ -6,7 +6,7 @@ OpenSwarm is a Rails app that helps you manage multiple AI agents and Git worktr
 
 ## Demo video
 
-<video src="media/0222.mp4" controls playsinline></video>
+[<video src="media/0222.mp4" controls playsinline></video>](https://youtu.be/RGQ21Z-W6Pw)
 
 ## The problem
 
